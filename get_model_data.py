@@ -6,8 +6,12 @@ import sqlite3
 from requests_toolbelt.threaded import pool
 import re
 
-conn = sqlite3.connect('gap_data.db')
 
+"""
+Gets back test data from yahoo finance, to be used to generate model
+"""
+
+conn = sqlite3.connect('gap_data.db')
 def get_historical_data(response, number_of_days):
     data = []
     start = response.text.find('>Currency in')

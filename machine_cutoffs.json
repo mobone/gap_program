@@ -1,1 +1,1 @@
-{"day": 2, "gap_down": [-10.05, 6.275], "gap_up": [-11.4713]}
+{"day": 3, "signal_cutoff": 0.05, "machine": "Regression", "gap_down": [-11.896, 14.380], "gap_up": [-12.569]}
