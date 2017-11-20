@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container" style="width: 60%">
+<br>
+<h2>Generate Data</h2>
+<form action="get_data" method=post class="form">
+  <div class="checkbox">Cap:
+    <label class="checkbox-inline"><input type="checkbox" name='cap_large' value="large"> Large &nbsp</label>
+    <label class="checkbox-inline"><input type="checkbox" name='cap_medium' value="medium"> Medium &nbsp</label>
+    <label class="checkbox-inline"><input type="checkbox" name='cap_small' value="small"> Small &nbsp&nbsp</label>
+    Dataset Size: <label class="checkbox-inline"><input type="checkbox" name='limit' value="checked"> Limit to 20 &nbsp</label>
+    <button class="btn btn-outline-success" type="submit">Generate</button>
+  </div>
+</form>
+
+<script type=text/javascript>
+  var currTableSize = 0;
+  var newTableSize = 1;
+  var get_data = function() {
+
+    $.getJSON($SCRIPT_ROOT + '/_get_source_data', {
+    }, function(data) {
+      $("#result").html(data.result);
+      newTableSize = data.len;
+      $("#len").text(data.len);
+    });
+
+    if (currTableSize===newTableSize) {
+      clearInterval(x)
+    }
+    currTableSize = newTableSize;
+
+  }
+  window.onload = get_data;
+  var x = setInterval(get_data, 10000)
+</script>
+Total dataset size: <span id=len stype="font-size: 8px"></span>
+<span id=result stype="font-size: 8px"></span>
+
+{% endblock %}

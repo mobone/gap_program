@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container" style="width: 60%">
+<br>
+<h2>Generate Machines</h2>
+<form action="get_machines" method=post class="form">
+  <div class="form-inline">
+    Permutation Length:&nbsp
+    <select class="form-control" style='width: 75px'>
+        <option>2</option>
+        <option>3</option>
+        <option>4</option>
+        <option>5</option>
+        <option>6</option>
+      </select>&nbsp
+    Experiment Runs:&nbsp<input class="form-control mr-sm-1" style='width: 75px' type="text" name='exp_runs' placeholder="20">
+    &nbsp&nbsp<button class="btn btn-outline-success" type="submit">Generate</button>
+  </div>
+</form>
+
+<script type=text/javascript>
+
+  var get_data = function() {
+
+    $.getJSON($SCRIPT_ROOT + '/_get_machine_data', {
+    }, function(data) {
+      $("#result").html(data.result);
+
+    });
+
+  }
+  window.onload = get_data;
+  setInterval(get_data, 10000)
+</script>
+
+<span id=result stype="font-size: 8px"></span>
+
+{% endblock %}
