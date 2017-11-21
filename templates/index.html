@@ -3,6 +3,30 @@
 {% block content %}
 <div class="container col-md-6">
 <br>
-<h2>Today's Alerts</h2>
+<h4>Today's Alerts - {{ today }}</h4>
+<table class='table table-hover table-sm'>
+  <tr>
+    <th>Symbol</th>
+    <th>Play</th>
+    <th>Signal</th>
+    <th>Prediction</th>
+    <th>Vol Chg</th>
+    <th>Wk</th>
+    <th>Mth</th>
+    <th>Start Price</th>
+  </tr>
+{% for row in todays_alerts %}
+  <tr  onclick="window.open('https://finviz.com/quote.ashx?t={{ row[0] }}','_blank');">
+    <td><a target="_blank" href='https://finviz.com/quote.ashx?t={{ row[0] }}'>{{row[0]}}</td>
+    <td>{{ row[1] }}</td>
+    <td>{{ '%0.2f'|format(row[2]*100) }}%</td>
+    <td>{{ '%0.2f'|format(row[3]*100) }}%</td>
+    <td>{{ '%0.2f'|format(row[4]*100) }}%</td>
+    <td>{{ '%0.2f'|format(row[5]*100) }}%</td>
+    <td>{{ '%0.2f'|format(row[6]*100) }}%</td>
+    <td>{{ '$%0.2f'|format(row[7]) }}</td>
+  </tr>
+{% endfor %}
+</table>
 
 {% endblock %}

@@ -20,9 +20,8 @@ class finviz_alerts(object):
     runs their data through prediction, stores in database
     """
 
-    def start_process(self):
-        #if date.today().strftime('%y%m%d') == NYSE_holidays()[0].strftime('%y%m%d'):
-        #    return
+    def __init__(self):
+        print("Getting alerts", datetime.now())
 
         with open('machine_cutoffs.json', 'r') as f:
             self.param_dict = eval(f.read())
@@ -41,7 +40,7 @@ class finviz_alerts(object):
         for company in self.companies.iterrows():
 
             start_date = datetime.strptime(company[1]['Start_Date'], '%b %d, %Y')
-            print(start_date)
+
             for i in range(self.param_dict['hold_days']-1):
                 start_date = start_date+timedelta(days=1)
                 while start_date.strftime('%y%m%d') == NYSE_holidays()[0].strftime('%y%m%d') or start_date.weekday()>=5:
@@ -53,7 +52,7 @@ class finviz_alerts(object):
             self.companies.loc[company[0],'Percent_Change'] = None
             self.companies.loc[company[0],'Hold_Days'] = self.param_dict['hold_days']
 
-        print(self.companies)
+
 
     def get_predictions(self):
         self.companies['Play'] = None
@@ -101,6 +100,7 @@ class finviz_alerts(object):
                     df = pd.read_html(finviz_page[start:end], header=0)[0]
                 else:
                     df = df.append(pd.read_html(finviz_page[start:end], header=0)[0])
+                
 
 
         df = df.reset_index()
@@ -170,7 +170,9 @@ class finviz_alerts(object):
 
 
 class closer(object):
-    def start_process(self):
+    def __init__(self):
+        print("Getting close prices", datetime.now())
+
         # get closing companies
         conn = sqlite3.connect('gap_data.db')
         close_date = datetime.now().strftime('%b %d, %Y')
@@ -189,8 +191,3 @@ class closer(object):
             cur = conn.cursor()
             cur.execute('update alerts set Close_Price = %f, Percent_Change = % f where Symbol="%s"' % (close_price, percent_change, symbol))
         conn.commit()
-
-
-
-#finviz_alerts().start_process()
-closer().start_process()
