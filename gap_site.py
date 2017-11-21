@@ -10,8 +10,6 @@ from time import sleep
 app = Flask(__name__)
 
 def process_manager():
-
-
     start_date = datetime.today()
     while True:
         # get next start date
@@ -39,8 +37,6 @@ def process_manager():
         start_date = start_date + timedelta(days=1)
 
 
-
-
 @app.route('/')
 def index():
     conn = sqlite3.connect('gap_data.db')
@@ -57,9 +53,10 @@ if __name__ == '__main__':
     scheduler = APScheduler()
     scheduler.init_app(app)
     scheduler.start()
-    
+
     if app.config['DEBUG'] is False:
         scheduler.add_job(id='get_finviz_alerts',func='gap_site:process_manager')
 
-    app.run()
-    index()
+        app.run(host='0.0.0.0', port=8080)
+    else:
+        app.run()

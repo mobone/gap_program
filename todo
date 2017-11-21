@@ -3,9 +3,9 @@ add nyse holidays to other programs
 create indexes on couchdb option data
 
 gap program:
-create scheduler process to intake and update data at certain times
+Done - create scheduler process to intake and update data at certain times
 Done - complete models by using histograms, finding cut offs
 Done - create input process, looks up gap stocks from finviz in the morning
 Done - add machine learn prediction models to input process
-create update process which records the final pricess after n days
-format data from the database to be output to the website
+Done - create update process which records the final pricess after n days
+In Progess - format data from the database to be output to the website
