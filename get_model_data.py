@@ -49,6 +49,7 @@ def get_changes(response):
 
     df = df.dropna()
     out_df = None
+
     for i in df[df['Overnight_change'].abs()>.05].index:
 
         signal_date = df.ix[i,'Date']
@@ -120,18 +121,17 @@ for response in p.responses():
         symbols = symbols.append(df)
 
 
-print(symbols)
+
 urls = []
 for symbol in symbols.values:
     url = "http://finance.yahoo.com/quote/" + symbol + "/history"
     urls.append(url)
-print(len(urls))
+
 p = pool.Pool.from_urls(urls, num_processes=20)
 p.join_all()
 
 for response in p.responses():
     try:
-        print(response.request_kwargs['url'])
         get_changes(response)
     except Exception as e:
         print(e)

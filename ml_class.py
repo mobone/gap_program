@@ -100,9 +100,9 @@ class machine(object):
 
 if __name__ == '__main__':
     total_results = []
-    for gap_percentage in [.05]:
+    for gap_percentage in [.05,.1]:
         for gap_direction in ['up', 'down']:
-            for hold_days in [3]:
+            for hold_days in [0,1,2,3,4]:
                 results = []
                 for j in range(30):
                     x = machine(gap_direction, gap_percentage, hold_days, 'Regression')
