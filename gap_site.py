@@ -8,6 +8,9 @@ from requests_toolbelt.threaded import pool
 from finviz_alerts import *
 app = Flask(__name__)
 
+def process_manager():
+    print("hey")
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -18,5 +21,5 @@ if __name__ == '__main__':
     scheduler = APScheduler()
     scheduler.init_app(app)
     scheduler.start()
-    scheduler.add_job(id='get_finviz_alerts',func='finviz_alerts:start_process')
+    scheduler.add_job(id='get_finviz_alerts',func='gap_site:process_manager')
     app.run()
