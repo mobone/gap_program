@@ -29,12 +29,10 @@ class finviz_alerts(object):
             self.param_dict = eval(f.read())
         self.get_machines()
 
-        # TODO: put into while true, add dates and times for triggering
         self.get_alerts()
         self.get_predictions()
         self.get_close_dates()
 
-        # TODO: add storage into sqlite
         conn = sqlite3.connect('gap_data.db')
         self.companies.to_sql('alerts', conn, if_exists='append', index=False)
 
@@ -72,6 +70,7 @@ class finviz_alerts(object):
         self.down_companies.loc[self.down_companies['Prediction']>self.param_dict['gap_down'][1], 'Play'] = 'Long'
 
         self.companies = self.up_companies.append(self.down_companies)
+        print(self.companies)
         self.companies = self.companies.dropna(subset=['Play'])
 
     def get_machines(self):
@@ -172,7 +171,7 @@ class closer(object):
         conn = sqlite3.connect('gap_data.db')
         close_date = datetime.now().strftime('%b %d, %Y')
         df = pd.read_sql('select * from alerts where Close_Date = "%s"' % close_date, conn)
-        
+
         for company in df.iterrows():
             symbol = company[1]['Symbol']
             finviz_page = r.get('https://finviz.com/quote.ashx?t=' + symbol).content

@@ -47,6 +47,8 @@ class machine(object):
 
         df = df.ix[:,['Symbol', 'Date', 'Signal', 'Wk', 'Mth', 'Vol_Chg', self.hold_days]]
 
+        #df = df.fillna(df.mean())
+
         df[self.hold_days] = pd.to_numeric(df[self.hold_days])
         if self.gap_direction=="up":
             df = df[df['Signal']>0]
@@ -55,6 +57,7 @@ class machine(object):
 
         df = df[df['Signal'].abs()>self.gap_percentage]
         self.df = df.dropna()
+
 
     def bin_data(self):
         self.df['Bin'] = np.round(self.df[self.hold_days].rank(pct=True)*(4))
@@ -66,17 +69,29 @@ class machine(object):
         elif self.machine=='Regression':
             self.clf = SVR(C=1.0, epsilon=0.2)
             self.out_clf = SVR(C=1.0, epsilon=0.2)
+        try:
 
-        self.clf.fit(a_train.ix[:,2:-1], b_train)
+            self.clf.fit(a_train.ix[:,2:-1], b_train)
+        except:
+            print('um')
+            b_train.to_csv("bad_data_a.csv")
+            b_train.to_csv("bad_data_b.csv")
+            input()
 
+        """
         if self.machine=='Classifier':
             self.out_clf.fit(self.df.ix[:,2:-2], self.df.ix[:,'Bin'])
         elif self.machine=='Regression':
             self.out_clf.fit(self.df.ix[:,2:-1], self.df.ix[:,self.hold_days])
-        joblib.dump(self.out_clf, 'models/gap_%s.pkl' % self.gap_direction)
+        """
+        #joblib.dump(self.out_clf, 'models/gap_%s.pkl' % self.gap_direction)
 
     def predict(self, a_test):
-        predicted = self.clf.predict(a_test.ix[:,2:-1])
+        try:
+            predicted = self.clf.predict(a_test.ix[:,2:-1])
+        except:
+            a_test.to_csv('bad_data_c.csv')
+            return
         a_test['Predicted'] = predicted
         self.result_df = a_test
 
@@ -86,13 +101,17 @@ class machine(object):
             positive = self.result_df[self.result_df['Predicted']==4]
         elif self.machine=='Regression':
             self.result_df = self.result_df.sort_values(by='Predicted')
-            negative = self.result_df.head(20)
-            positive = self.result_df.tail(20)
+            negative = self.result_df[self.result_df['Predicted']<-.07]
+            positive = self.result_df[self.result_df['Predicted']>.036]
 
         self.negative = negative[self.hold_days]
         self.positive = positive[self.hold_days]
-        self.cutoff_0 = max(negative['Predicted'])
-        self.cutoff_1 = max(positive['Predicted'])
+        if self.machine=='Classifier':
+            self.cutoff_0 = 0
+            self.cutoff_1 = 4
+        elif self.machine=='Regression':
+            self.cutoff_0 = max(negative['Predicted'])
+            self.cutoff_1 = min(positive['Predicted'])
 
 
 
@@ -102,18 +121,36 @@ if __name__ == '__main__':
     total_results = []
     for gap_percentage in [.05,.1]:
         for gap_direction in ['up', 'down']:
-            for hold_days in [0,1,2,3,4]:
-                results = []
-                for j in range(30):
-                    x = machine(gap_direction, gap_percentage, hold_days, 'Regression')
-                    for result in range(len(x.negative)):
-                        results.append([gap_percentage, gap_direction, hold_days, x.cutoff_0, x.cutoff_1, x.negative.iloc[result], x.positive.iloc[result]])
+            for hold_days in [1,2,3,4]:
 
-                df = pd.DataFrame(results)
-                total_results.append([df[0].values[0], df[1].values[0], df[2].values[0], df[3].median(), df[4].median(), df[5].median(), df[6].median()])
+                negative_results = None
+                positive_results = None
+                for j in range(20):
+                    try:
+                        x = machine(gap_direction, gap_percentage, hold_days, 'Classifier')
+                        if negative_results is None:
+                            negative_results = x.negative
+                            positive_results = x.positive
+                        else:
+                            negative_results = negative_results.append(x.negative)
+                            positive_results = positive_results.append(x.positive)
+                        #for result in range(len(x.negative)):
+                        #    results.append([gap_percentage, gap_direction, hold_days, x.cutoff_0, x.cutoff_1, x.negative.iloc[result], x.positive.iloc[result]])
+
+                    except:
+                        continue
 
 
-    df = pd.DataFrame(total_results, columns = ['Gap_Perc', 'Gap_Dir', 'Hold_days', 'Cutoff_0', 'Cutoff_1', 'Neg_Mean', 'Pos_Mean'])
-    df['Diff'] = (df['Neg_Mean']-df['Pos_Mean'])*-1
-    df = df.sort_values(by='Diff')
+
+                total_results.append([gap_percentage, gap_direction, hold_days, x.cutoff_0, x.cutoff_1, negative_results.median(), positive_results.median(), negative_results.mean(), positive_results.mean()])
+                df = pd.DataFrame(total_results, columns = ['Gap_Perc', 'Gap_Dir', 'Hold_days', 'Cutoff_0', 'Cutoff_1', 'Neg_Median', 'Pos_Median', 'Neg_Mean', 'Pos_Mean'])
+                print(df)
+
+
+    df = pd.DataFrame(total_results, columns = ['Gap_Perc', 'Gap_Dir', 'Hold_days', 'Cutoff_0', 'Cutoff_1', 'Neg_Median', 'Pos_Median', 'Neg_Mean', 'Pos_Mean'])
     print(df)
+    df['Diff_Median'] = (df['Neg_Median']-df['Pos_Median'])*-1
+    df['Diff_Mean'] = (df['Neg_Mean']-df['Pos_Mean'])*-1
+    df = df.sort_values(by='Diff_Median')
+    print(df)
+    df.to_csv("machine_results.csv", index=False)

@@ -17,7 +17,7 @@ def process_manager():
             start_date = start_date + timedelta(days=1)
 
         # sleep until 9am
-        finviz_alert_start = start_date.strftime('%Y-%m-%d') + ' 9:00:00'
+        finviz_alert_start = start_date.strftime('%Y-%m-%d') + ' 9:30:00'
         print('Next alert time: ',finviz_alert_start)
         while datetime.now()<datetime.strptime(finviz_alert_start, '%Y-%m-%d %H:%M:%S'):
             sleep(5)
