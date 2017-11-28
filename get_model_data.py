@@ -35,7 +35,7 @@ def get_changes(df):
         avg_vol = df.ix[i-61:i-1,'Volume'].mean()
         change_in_vol = volume / avg_vol - 1
 
-        change = [symbol, signal_date, signal, avg_vol, change_in_vol]
+        change = [symbol, signal_date, signal, avg_vol, change_in_vol, start_price]
         if start_price < 1 or avg_vol == 0 or volume == 0 or avg_vol<500000:
             return
 
@@ -52,7 +52,7 @@ def get_changes(df):
                 change.append(None)
 
         all_changes.append(change)
-    out_df = pd.DataFrame(all_changes, columns=['Symbol','Date','Signal','Avg_Vol', 'Vol_Chg', 'Wk','Mth','Qtr','0','1','2','3','4','5'])
+    out_df = pd.DataFrame(all_changes, columns=['Symbol','Date','Signal','Avg_Vol', 'Vol_Chg', 'Start_Price', 'Wk','Mth','Qtr','0','1','2','3','4','5'])
     if out_df.empty:
         return
 

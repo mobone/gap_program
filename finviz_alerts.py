@@ -30,24 +30,23 @@ class finviz_alerts(object):
         print("Getting alerts", datetime.now())
         self.get_alerts()
         conn = sqlite3.connect('gap_data.db')
-
         machine_names = sorted(os.listdir('./models'))[1:]
-        for i in range(len(machine_names)-4):
-            machine_ids = machine_names[i].split('_')
-            self.machine_id = machine_names[i].replace("_down","").replace(".pkl","")
-            print(self.machine_id)
-
+        original_companies = self.companies.copy()
+        for machine_name in machine_names:
+            self.companies = original_companies.copy()
+            machine_ids = machine_name.split('_')
+            self.machine_id = machine_name.replace("_both","").replace(".pkl","")
             self.hold_days = int(machine_ids[3][:1])
             self.cut_off = float(machine_ids[2])
 
+            if self.cut_off == .1:
+                self.companies = self.companies[self.companies['Signal'].abs()>.1]
 
-            self.get_machines(machine_names[i], machine_names[i+4])
-
-
+            self.get_machines(machine_name)
             self.get_predictions()
             self.get_close_dates()
 
-            self.companies.to_sql(self.machine_id, conn, if_exists='append', index=False)
+            self.companies.to_sql(self.machine_id, conn, if_exists='replace', index=False)
 
     def get_close_dates(self):
         for company in self.companies.iterrows():
@@ -65,36 +64,20 @@ class finviz_alerts(object):
             self.companies.loc[company[0],'Hold_Days'] = self.hold_days
 
     def get_predictions(self):
+        self.companies = self.companies.dropna()
         self.companies['Play'] = None
-        self.up_companies = self.companies[self.companies['Signal']>=self.cut_off]
-
-        #self.down_companies = self.companies[self.companies['Signal']<=self.cut_off]
-
-        up_predictions = self.clf_up.predict(self.up_companies[['Signal', 'Wk', 'Mth', 'Vol_Chg']])
-        self.up_companies['Prediction'] = up_predictions
-
-        #down_predictions = self.clf_down.predict(self.down_companies[['Signal', 'Wk', 'Mth', 'Vol_Chg']])
-        #self.down_companies['Prediction'] = down_predictions
-
-        self.up_companies.loc[self.up_companies['Prediction']==0, 'Play'] = 'Short'
-        self.up_companies.loc[self.up_companies['Prediction']==2, 'Play'] = 'Long'
-
-        #self.down_companies.loc[self.down_companies['Prediction']==0, 'Play'] = 'Short'
-        #self.down_companies.loc[self.down_companies['Prediction']==2, 'Play'] = 'Long'
-
-        # only care about up companies
-        #self.companies = self.up_companies.append(self.down_companies)
-        self.companies = self.up_companies
-
+        self.companies['Prediction'] = self.clf.predict(self.companies[['Signal', 'Wk', 'Mth', 'Vol_Chg']])
+        self.companies.loc[self.companies['Prediction']==0, 'Play'] = 'Short'
+        self.companies.loc[self.companies['Prediction']==4, 'Play'] = 'Long'
         self.companies = self.companies.dropna(subset=['Play'])
 
-    def get_machines(self, down_name, up_name):
-        self.clf_up = joblib.load('models/%s' % up_name)
-        self.clf_down = joblib.load('models/%s' % down_name)
+    def get_machines(self, name):
+        self.clf = joblib.load('models/%s' % name)
+
 
     def get_alerts(self):
-        url_up = 'https://finviz.com/screener.ashx?v=111&f=sh_avgvol_o300,sh_opt_short,ta_perf_d5o&ft=3&r='
-        url_down = 'https://finviz.com/screener.ashx?v=111&f=sh_avgvol_o300,sh_opt_short,ta_perf_d5u&ft=3&r='
+        url_up = 'https://finviz.com/screener.ashx?v=111&f=sh_avgvol_o500,sh_opt_short,ta_perf_d5o&ft=3&r='
+        url_down = 'https://finviz.com/screener.ashx?v=111&f=sh_avgvol_o500,sh_opt_short,ta_perf_d5u&ft=3&r='
 
         # get total pages
         up_count = int(re.findall(b'Total: </b>[0-9]*', r.get(url_up).content)[0].split(b'>')[1])
@@ -128,6 +111,9 @@ class finviz_alerts(object):
             companies.append(company)
 
         self.companies = pd.DataFrame(companies, columns = ['Symbol', 'Start_Date', 'Signal', 'Avg_Vol', 'Vol', 'Vol_Chg', 'Wk', 'Mth', 'Qtr', 'Start_Price'])
+        self.companies = self.companies[self.companies['Start_Price']>2]
+
+
 
 
     def get_company_data(self, response):
@@ -190,7 +176,7 @@ class closer(object):
         tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", conn)
         for table_name in tables.values:
             table_name = table_name[0]
-            
+
             print(table_name)
             try:
                 input()
@@ -211,8 +197,8 @@ class closer(object):
                 start_price = float(company[1]['Start_Price'])
                 percent_change = (close_price-start_price)/start_price
                 cur = conn.cursor()
-                cur.execute('update alerts set Close_Price = %f, Percent_Change = % f where Symbol="%s" and Close_Date="%s"' % (close_price, percent_change, symbol, close_date))
+                cur.execute('update alerts set Close_Price = %f, Percent_Change = %f where Symbol="%s" and Close_Date="%s"' % (close_price, percent_change, symbol, close_date))
             conn.commit()
 
-#x = finviz_alerts()
-x = closer()
+x = finviz_alerts()
+#x = closer()

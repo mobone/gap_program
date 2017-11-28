@@ -38,14 +38,14 @@ class machine(object):
             target = self.df.ix[:,self.hold_days]
             self.data = self.df
 
-        a_train, a_test, b_train, b_test = train_test_split(self.data, target, test_size=.35)
+        a_train, a_test, b_train, b_test = train_test_split(self.data, target, test_size=.4)
         self.get_machine(a_train, b_train)
         self.predict(a_test)
         self.get_results()
 
     def get_data(self):
         conn = sqlite3.connect('gap_data.db')
-        df = pd.read_sql('select * from gap_data where "%s"<1 and "%s">-1' % (self.hold_days, self.hold_days), conn)
+        df = pd.read_sql('select * from gap_data where "%s"<1 and "%s">-1 and Start_Price>2' % (self.hold_days, self.hold_days), conn)
 
         df = df.ix[:,['Symbol', 'Date', 'Signal', 'Wk', 'Mth','Vol_Chg', self.hold_days]]
 
@@ -56,13 +56,15 @@ class machine(object):
             df = df[df['Signal']>0]
         elif self.gap_direction=="down":
             df = df[df['Signal']<0]
+        elif self.gap_direction=='both':
+            df = df
 
-        df = df[df['Signal'].abs()>self.gap_percentage]
+        df = df[df['Signal'].abs()>=self.gap_percentage]
         self.df = df.dropna()
 
 
     def bin_data(self):
-        self.df['Bin'] = np.round(self.df[self.hold_days].rank(pct=True)*(2))
+        self.df['Bin'] = np.round(self.df[self.hold_days].rank(pct=True)*(4))
 
     def get_machine(self, a_train, b_train):
         if self.machine=='Classifier':
@@ -72,13 +74,12 @@ class machine(object):
             self.clf = SVR(C=1.0, epsilon=0.2)
             self.out_clf = SVR(C=1.0, epsilon=0.2)
         try:
-
             self.clf.fit(a_train.ix[:,2:-1], b_train)
         except Exception as e:
-            print('um', e)
+            print(e)
             b_train.to_csv("bad_data_a.csv")
             b_train.to_csv("bad_data_b.csv")
-            input()
+
 
         if self.sim_num == 0:
             if self.machine=='Classifier':
@@ -98,28 +99,28 @@ class machine(object):
         self.result_df = a_test
 
     def get_results(self):
-        if self.machine=='Classifier':
-            negative = self.result_df[self.result_df['Predicted']==0]
-            positive = self.result_df[self.result_df['Predicted']==2]
-        elif self.machine=='Regression':
-            self.result_df = self.result_df.sort_values(by='Predicted')
-            negative = self.result_df.head(20)
-            positive = self.result_df.tail(20)
-            #negative = self.result_df[self.result_df['Predicted']<-.07]
-            #positive = self.result_df[self.result_df['Predicted']>.036]
 
-        self.negative = negative[self.hold_days]
-        self.positive = positive[self.hold_days]
-        #print(negative)
-        #print('----')
-        #print(positive)
-        #input()
+        if self.sim_num == 0:
+            self.result_df.to_csv('results/%s.csv' % self.machine_id)
+        if len(self.result_df[self.result_df['Predicted']==4]>8):
+            histogram_df = self.result_df[['Predicted',self.hold_days]]
+            dtf = histogram_df.boxplot(by='Predicted')
+            dtf.plot()
+            fig = dtf.get_figure()
+            fig.savefig("histograms/%s_%s.png" % (self.machine_id, self.sim_num))
+            plt.close()
+
         if self.machine=='Classifier':
+            self.negative = self.result_df[self.result_df['Predicted']==0][self.hold_days]
+            self.positive = self.result_df[self.result_df['Predicted']==4][self.hold_days]
             self.cutoff_0 = 0
             self.cutoff_1 = 4
         elif self.machine=='Regression':
-            self.cutoff_0 = max(negative['Predicted'])
-            self.cutoff_1 = min(positive['Predicted'])
+            self.result_df = self.result_df.sort_values(by='Predicted')
+            self.negative = self.result_df.head(20)[self.hold_days]
+            self.positive = self.result_df.tail(20)[self.hold_days]
+            self.cutoff_0 = max(self.result_df.head(20)['Predicted'])
+            self.cutoff_1 = min(self.result_df.tail(20)['Predicted'])
 
 
 
@@ -127,9 +128,9 @@ class machine(object):
 
 if __name__ == '__main__':
     total_results = []
-    for gap_percentage in [.05]:
-        for gap_direction in ['up']:
-            for hold_days in [2,3,4,5]:
+    for gap_percentage in [.1]:
+        for gap_direction in ['both']:
+            for hold_days in [1,2,3,4,5]:
                 for machine_type in ['Classifier']:
 
                     negative_results = None
@@ -149,13 +150,13 @@ if __name__ == '__main__':
 
 
 
-                    total_results.append([x.machine_id, x.cutoff_0, x.cutoff_1, len(negative_results)/30, len(positive_results)/30, negative_results.median(), positive_results.median(), negative_results.mean(), positive_results.mean()])
-                    df = pd.DataFrame(total_results, columns = ['Machine', 'Cutoff_0', 'Cutoff_1', 'Neg_Count', 'Pos_Count','Neg_Median', 'Pos_Median', 'Neg_Mean', 'Pos_Mean'])
+                    total_results.append([x.machine_id, x.cutoff_0, x.cutoff_1, len(negative_results)/30, len(positive_results)/30, negative_results.median(), negative_results.mean(), positive_results.median(), positive_results.mean()])
+                    df = pd.DataFrame(total_results, columns = ['Machine', 'Cutoff_0', 'Cutoff_1', 'Neg_Count', 'Pos_Count','Neg_Median', 'Neg_Mean', 'Pos_Median', 'Pos_Mean'])
 
 
 
 
-    df = pd.DataFrame(total_results, columns = ['Machine', 'Cutoff_0', 'Cutoff_1', 'Neg_Count', 'Pos_Count','Neg_Median', 'Pos_Median', 'Neg_Mean', 'Pos_Mean'])
+    df = pd.DataFrame(total_results, columns = ['Machine', 'Cutoff_0', 'Cutoff_1', 'Neg_Count', 'Pos_Count','Neg_Median', 'Neg_Mean', 'Pos_Median', 'Pos_Mean'])
     df = df[(df['Pos_Count']>8) & (df['Neg_Count']>8)]
     df['Diff_Median'] = (df['Neg_Median']-df['Pos_Median'])*-1
     df['Diff_Mean'] = (df['Neg_Mean']-df['Pos_Mean'])*-1
