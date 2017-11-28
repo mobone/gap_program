@@ -16,7 +16,9 @@ class machine(object):
     datebase
     """
 
-    def __init__(self, gap_direction, gap_percentage, hold_days, machine):
+    def __init__(self, gap_direction, gap_percentage, hold_days, machine, sim_num):
+        self.sim_num = sim_num
+        self.machine_id = machine+'_'+gap_direction+'_'+str(gap_percentage)+'_'+str(hold_days)
         self.gap_direction = gap_direction
         self.gap_percentage = gap_percentage
         self.hold_days = str(hold_days)
@@ -45,7 +47,7 @@ class machine(object):
         conn = sqlite3.connect('gap_data.db')
         df = pd.read_sql('select * from gap_data where "%s"<1 and "%s">-1' % (self.hold_days, self.hold_days), conn)
 
-        df = df.ix[:,['Symbol', 'Date', 'Signal', 'Wk', 'Mth', 'Vol_Chg', self.hold_days]]
+        df = df.ix[:,['Symbol', 'Date', 'Signal', 'Wk', 'Mth','Vol_Chg', self.hold_days]]
 
         #df = df.fillna(df.mean())
 
@@ -60,7 +62,7 @@ class machine(object):
 
 
     def bin_data(self):
-        self.df['Bin'] = np.round(self.df[self.hold_days].rank(pct=True)*(4))
+        self.df['Bin'] = np.round(self.df[self.hold_days].rank(pct=True)*(2))
 
     def get_machine(self, a_train, b_train):
         if self.machine=='Classifier':
@@ -72,19 +74,19 @@ class machine(object):
         try:
 
             self.clf.fit(a_train.ix[:,2:-1], b_train)
-        except:
-            print('um')
+        except Exception as e:
+            print('um', e)
             b_train.to_csv("bad_data_a.csv")
             b_train.to_csv("bad_data_b.csv")
             input()
 
-        """
-        if self.machine=='Classifier':
-            self.out_clf.fit(self.df.ix[:,2:-2], self.df.ix[:,'Bin'])
-        elif self.machine=='Regression':
-            self.out_clf.fit(self.df.ix[:,2:-1], self.df.ix[:,self.hold_days])
-        """
-        #joblib.dump(self.out_clf, 'models/gap_%s.pkl' % self.gap_direction)
+        if self.sim_num == 0:
+            if self.machine=='Classifier':
+                self.out_clf.fit(self.df.ix[:,2:-2], self.df.ix[:,'Bin'])
+            elif self.machine=='Regression':
+                self.out_clf.fit(self.df.ix[:,2:-1], self.df.ix[:,self.hold_days])
+
+            joblib.dump(self.out_clf, 'models/%s.pkl' % self.machine_id)
 
     def predict(self, a_test):
         try:
@@ -98,14 +100,20 @@ class machine(object):
     def get_results(self):
         if self.machine=='Classifier':
             negative = self.result_df[self.result_df['Predicted']==0]
-            positive = self.result_df[self.result_df['Predicted']==4]
+            positive = self.result_df[self.result_df['Predicted']==2]
         elif self.machine=='Regression':
             self.result_df = self.result_df.sort_values(by='Predicted')
-            negative = self.result_df[self.result_df['Predicted']<-.07]
-            positive = self.result_df[self.result_df['Predicted']>.036]
+            negative = self.result_df.head(20)
+            positive = self.result_df.tail(20)
+            #negative = self.result_df[self.result_df['Predicted']<-.07]
+            #positive = self.result_df[self.result_df['Predicted']>.036]
 
         self.negative = negative[self.hold_days]
         self.positive = positive[self.hold_days]
+        #print(negative)
+        #print('----')
+        #print(positive)
+        #input()
         if self.machine=='Classifier':
             self.cutoff_0 = 0
             self.cutoff_1 = 4
@@ -119,36 +127,36 @@ class machine(object):
 
 if __name__ == '__main__':
     total_results = []
-    for gap_percentage in [.05,.1]:
-        for gap_direction in ['up', 'down']:
-            for hold_days in [1,2,3,4]:
+    for gap_percentage in [.05]:
+        for gap_direction in ['up']:
+            for hold_days in [2,3,4,5]:
+                for machine_type in ['Classifier']:
 
-                negative_results = None
-                positive_results = None
-                for j in range(20):
-                    try:
-                        x = machine(gap_direction, gap_percentage, hold_days, 'Classifier')
-                        if negative_results is None:
-                            negative_results = x.negative
-                            positive_results = x.positive
-                        else:
-                            negative_results = negative_results.append(x.negative)
-                            positive_results = positive_results.append(x.positive)
-                        #for result in range(len(x.negative)):
-                        #    results.append([gap_percentage, gap_direction, hold_days, x.cutoff_0, x.cutoff_1, x.negative.iloc[result], x.positive.iloc[result]])
-
-                    except:
-                        continue
-
+                    negative_results = None
+                    positive_results = None
+                    for j in range(30):
+                        try:
+                            x = machine(gap_direction, gap_percentage, hold_days, machine_type, j)
+                            if negative_results is None:
+                                negative_results = x.negative
+                                positive_results = x.positive
+                            else:
+                                negative_results = negative_results.append(x.negative)
+                                positive_results = positive_results.append(x.positive)
+                        except Exception as e:
+                            print(e)
+                            continue
 
 
-                total_results.append([gap_percentage, gap_direction, hold_days, x.cutoff_0, x.cutoff_1, negative_results.median(), positive_results.median(), negative_results.mean(), positive_results.mean()])
-                df = pd.DataFrame(total_results, columns = ['Gap_Perc', 'Gap_Dir', 'Hold_days', 'Cutoff_0', 'Cutoff_1', 'Neg_Median', 'Pos_Median', 'Neg_Mean', 'Pos_Mean'])
-                print(df)
+
+                    total_results.append([x.machine_id, x.cutoff_0, x.cutoff_1, len(negative_results)/30, len(positive_results)/30, negative_results.median(), positive_results.median(), negative_results.mean(), positive_results.mean()])
+                    df = pd.DataFrame(total_results, columns = ['Machine', 'Cutoff_0', 'Cutoff_1', 'Neg_Count', 'Pos_Count','Neg_Median', 'Pos_Median', 'Neg_Mean', 'Pos_Mean'])
 
 
-    df = pd.DataFrame(total_results, columns = ['Gap_Perc', 'Gap_Dir', 'Hold_days', 'Cutoff_0', 'Cutoff_1', 'Neg_Median', 'Pos_Median', 'Neg_Mean', 'Pos_Mean'])
-    print(df)
+
+
+    df = pd.DataFrame(total_results, columns = ['Machine', 'Cutoff_0', 'Cutoff_1', 'Neg_Count', 'Pos_Count','Neg_Median', 'Pos_Median', 'Neg_Mean', 'Pos_Mean'])
+    df = df[(df['Pos_Count']>8) & (df['Neg_Count']>8)]
     df['Diff_Median'] = (df['Neg_Median']-df['Pos_Median'])*-1
     df['Diff_Mean'] = (df['Neg_Mean']-df['Pos_Mean'])*-1
     df = df.sort_values(by='Diff_Median')

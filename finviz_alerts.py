@@ -7,7 +7,7 @@ import warnings
 import re
 from nyse_holidays import *
 import sqlite3
-
+import os
 warnings.filterwarnings('ignore')
 
 class finviz_alerts(object):
@@ -17,65 +17,80 @@ class finviz_alerts(object):
     """
     def __init__(self):
         # check if alerts have already been collected for today
+        # TODO
+        """
         conn = sqlite3.connect('gap_data.db')
         today = datetime.now().strftime('%b %d, %Y')
         df = pd.read_sql('select * from alerts where Start_Date = "%s"' % today, conn)
         if not df.empty:
             return
+        """
+
 
         print("Getting alerts", datetime.now())
-
-        with open('machine_cutoffs.json', 'r') as f:
-            self.param_dict = eval(f.read())
-        self.get_machines()
-
         self.get_alerts()
-        self.get_predictions()
-        self.get_close_dates()
-
         conn = sqlite3.connect('gap_data.db')
-        self.companies.to_sql('alerts', conn, if_exists='append', index=False)
+
+        machine_names = sorted(os.listdir('./models'))[1:]
+        for i in range(len(machine_names)-4):
+            machine_ids = machine_names[i].split('_')
+            self.machine_id = machine_names[i].replace("_down","").replace(".pkl","")
+            print(self.machine_id)
+
+            self.hold_days = int(machine_ids[3][:1])
+            self.cut_off = float(machine_ids[2])
+
+
+            self.get_machines(machine_names[i], machine_names[i+4])
+
+
+            self.get_predictions()
+            self.get_close_dates()
+
+            self.companies.to_sql(self.machine_id, conn, if_exists='append', index=False)
 
     def get_close_dates(self):
         for company in self.companies.iterrows():
 
             start_date = datetime.strptime(company[1]['Start_Date'], '%b %d, %Y')
 
-            for i in range(self.param_dict['hold_days']-1):
+            for i in range(self.hold_days-1):
                 start_date = start_date+timedelta(days=1)
                 while start_date.strftime('%y%m%d') == NYSE_holidays()[0].strftime('%y%m%d') or start_date.weekday()>=5:
                     start_date = start_date+timedelta(days=1)
 
-
             self.companies.loc[company[0],'Close_Date'] = start_date.strftime('%b %d, %Y')
             self.companies.loc[company[0],'Close_Price'] = None
             self.companies.loc[company[0],'Percent_Change'] = None
-            self.companies.loc[company[0],'Hold_Days'] = self.param_dict['hold_days']
+            self.companies.loc[company[0],'Hold_Days'] = self.hold_days
 
     def get_predictions(self):
         self.companies['Play'] = None
-        self.up_companies = self.companies[self.companies['Signal']>0]
-        self.down_companies = self.companies[self.companies['Signal']<0]
+        self.up_companies = self.companies[self.companies['Signal']>=self.cut_off]
+
+        #self.down_companies = self.companies[self.companies['Signal']<=self.cut_off]
 
         up_predictions = self.clf_up.predict(self.up_companies[['Signal', 'Wk', 'Mth', 'Vol_Chg']])
         self.up_companies['Prediction'] = up_predictions
-        down_predictions = self.clf_down.predict(self.down_companies[['Signal', 'Wk', 'Mth', 'Vol_Chg']])
-        self.down_companies['Prediction'] = down_predictions
 
-        # {"day": 3, "signal_cutoff": 0.05, "machine": "Regression", "gap_down": [-11.896, 14.380], "gap_up": [-12.569]}
+        #down_predictions = self.clf_down.predict(self.down_companies[['Signal', 'Wk', 'Mth', 'Vol_Chg']])
+        #self.down_companies['Prediction'] = down_predictions
 
-        self.up_companies.loc[self.up_companies['Prediction']<self.param_dict['gap_up'][0], 'Play'] = 'Short'
+        self.up_companies.loc[self.up_companies['Prediction']==0, 'Play'] = 'Short'
+        self.up_companies.loc[self.up_companies['Prediction']==2, 'Play'] = 'Long'
 
-        self.down_companies.loc[self.down_companies['Prediction']<self.param_dict['gap_down'][0], 'Play'] = 'Short'
-        self.down_companies.loc[self.down_companies['Prediction']>self.param_dict['gap_down'][1], 'Play'] = 'Long'
+        #self.down_companies.loc[self.down_companies['Prediction']==0, 'Play'] = 'Short'
+        #self.down_companies.loc[self.down_companies['Prediction']==2, 'Play'] = 'Long'
 
-        self.companies = self.up_companies.append(self.down_companies)
-        print(self.companies)
+        # only care about up companies
+        #self.companies = self.up_companies.append(self.down_companies)
+        self.companies = self.up_companies
+
         self.companies = self.companies.dropna(subset=['Play'])
 
-    def get_machines(self):
-        self.clf_up = joblib.load('models/gap_up.pkl')
-        self.clf_down = joblib.load('models/gap_down.pkl')
+    def get_machines(self, down_name, up_name):
+        self.clf_up = joblib.load('models/%s' % up_name)
+        self.clf_down = joblib.load('models/%s' % down_name)
 
     def get_alerts(self):
         url_up = 'https://finviz.com/screener.ashx?v=111&f=sh_avgvol_o300,sh_opt_short,ta_perf_d5o&ft=3&r='
@@ -103,7 +118,8 @@ class finviz_alerts(object):
         urls = []
         for symbol in df['Ticker']:
             urls.append('https://finviz.com/quote.ashx?t=' + symbol)
-        p = pool.Pool.from_urls(urls, num_processes=5)
+
+        p = pool.Pool.from_urls(urls, num_processes=20)
         p.join_all()
 
         companies = []
@@ -112,6 +128,7 @@ class finviz_alerts(object):
             companies.append(company)
 
         self.companies = pd.DataFrame(companies, columns = ['Symbol', 'Start_Date', 'Signal', 'Avg_Vol', 'Vol', 'Vol_Chg', 'Wk', 'Mth', 'Qtr', 'Start_Price'])
+
 
     def get_company_data(self, response):
         # formats all the other related data
@@ -170,19 +187,32 @@ class closer(object):
         # get closing companies
         conn = sqlite3.connect('gap_data.db')
         close_date = datetime.now().strftime('%b %d, %Y')
-        df = pd.read_sql('select * from alerts where Close_Date = "%s"' % close_date, conn)
+        tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", conn)
+        for table_name in tables.values:
+            table_name = table_name[0]
+            
+            print(table_name)
+            try:
+                input()
+                df = pd.read_sql('select * from "%s" where Close_Date = "%s"' % (table_name, close_date), conn)
+            except Exception as e:
+                print(e)
 
-        for company in df.iterrows():
-            symbol = company[1]['Symbol']
-            finviz_page = r.get('https://finviz.com/quote.ashx?t=' + symbol).content
 
-            start = finviz_page.find(b'snapshot-table2')-200
-            end = finviz_page.find(b'</table>',start+300)
+            for company in df.iterrows():
+                symbol = company[1]['Symbol']
+                finviz_page = r.get('https://finviz.com/quote.ashx?t=' + symbol).content
 
-            finviz_df = pd.read_html(finviz_page[start:end])[0]
-            close_price = float(finviz_df.loc[10,11])
-            start_price = float(company[1]['Start_Price'])
-            percent_change = (close_price-start_price)/start_price
-            cur = conn.cursor()
-            cur.execute('update alerts set Close_Price = %f, Percent_Change = % f where Symbol="%s"' % (close_price, percent_change, symbol))
-        conn.commit()
+                start = finviz_page.find(b'snapshot-table2')-200
+                end = finviz_page.find(b'</table>',start+300)
+
+                finviz_df = pd.read_html(finviz_page[start:end])[0]
+                close_price = float(finviz_df.loc[10,11])
+                start_price = float(company[1]['Start_Price'])
+                percent_change = (close_price-start_price)/start_price
+                cur = conn.cursor()
+                cur.execute('update alerts set Close_Price = %f, Percent_Change = % f where Symbol="%s" and Close_Date="%s"' % (close_price, percent_change, symbol, close_date))
+            conn.commit()
+
+#x = finviz_alerts()
+x = closer()

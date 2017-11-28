@@ -3,6 +3,8 @@ from bs4 import BeautifulSoup as bs
 import pandas as pd
 import requests as r
 import sqlite3
+from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 from requests_toolbelt.threaded import pool
 import re
 import pandas_datareader as pdr
@@ -17,7 +19,9 @@ yahoo_conn = sqlite3.connect('yahoo_data.db')
 
 def get_changes(df):
 
-    df['Percent_change'] = df['Adj Close'] / df['Adj Close'].shift(1) - 1
+    df['Percent_change'] = df['Open'] / df['Close'].shift(1) - 1
+
+
     df = df.reset_index()
     all_changes = []
     for i in df[df['Percent_change'].abs()>.05].index:
@@ -26,7 +30,7 @@ def get_changes(df):
 
         signal_date = str(df.ix[i,'Date']).split(' ')[0]
         signal = df.ix[i,'Percent_change']
-        start_price = df.ix[i,'Adj Close']
+        start_price = df.ix[i,'Open']
         volume = df.ix[i,'Volume']
         avg_vol = df.ix[i-61:i-1,'Volume'].mean()
         change_in_vol = volume / avg_vol - 1
@@ -37,18 +41,18 @@ def get_changes(df):
 
         for j in [5,20,60]:
             try:
-                change.append(df.ix[i-j]['Adj Close'] / start_price - 1)
+                change.append(df.ix[i-j]['Close'] / start_price - 1)
             except:
                 change.append(None)
 
-        for j in range(1,5):
+        for j in range(0,6):
             try:
-                change.append(df.ix[i+j]['Adj Close'] / start_price - 1)
+                change.append(df.ix[i+j]['Close'] / start_price - 1)
             except:
                 change.append(None)
 
         all_changes.append(change)
-    out_df = pd.DataFrame(all_changes, columns=['Symbol','Date','Signal','Avg_Vol', 'Vol_Chg', 'Wk','Mth','Qtr','1','2','3','4'])
+    out_df = pd.DataFrame(all_changes, columns=['Symbol','Date','Signal','Avg_Vol', 'Vol_Chg', 'Wk','Mth','Qtr','0','1','2','3','4','5'])
     if out_df.empty:
         return
 
@@ -62,8 +66,26 @@ except Exception as e:
     print(e)
 
 
+# get list of symbols that have split
+df = pd.read_sql("select * from "+'A', yahoo_conn).tail(300).reset_index()
+month = datetime.strptime(df.ix[0,'Date'].split(' ')[0], '%Y-%m-%d')
 urls = []
-#2653
+while month<datetime.now():
+    urls.append('https://eresearch.fidelity.com/eresearch/conferenceCalls.jhtml?tab=splits&begindate='+month.strftime('%m/%d/%y'))
+    month = month + relativedelta(months=1)
+
+p = pool.Pool.from_urls(urls, num_processes=20)
+p.join_all()
+
+split_symbols = []
+for response in p.responses():
+    symbols = pd.read_html(response.content)[1]['Symbol '].str.split(':')
+    for i in symbols:
+        split_symbols.append(i[0])
+
+
+# get all symbols
+urls = []
 pages = r.get('https://finviz.com/screener.ashx?v=111&f=sh_avgvol_o500,sh_opt_short').content
 pages = int(re.findall(r'Total: </b>[0-9]*', str(pages))[0].split('>')[1])
 print(pages)
@@ -71,9 +93,9 @@ for count in range(1,pages,20):
     url = 'https://finviz.com/screener.ashx?v=111&f=sh_avgvol_o500,sh_opt_short&r=' + str(count)
     urls.append(url)
 
-
 p = pool.Pool.from_urls(urls, num_processes=20)
 p.join_all()
+
 
 symbols = None
 for response in p.responses():
@@ -88,18 +110,20 @@ for response in p.responses():
         symbols = symbols.append(df)
 
 
-
 urls = []
 for symbol in symbols.values:
-    print(symbol)
+    if symbol in split_symbols:
+        print('split!', symbol)
+        continue
     try:
         try:
             df = pd.read_sql("select * from "+symbol, yahoo_conn)
         except Exception as e:
             df = pdr.get_data_yahoo(symbol)
             df = df.reset_index()
+            print('getting yahoo!', symbol)
             df.to_sql(symbol, yahoo_conn, if_exists='replace', index=False)
-        df = df.tail(300)
+        df = df.tail(350)
 
         get_changes(df)
     except Exception as e:
