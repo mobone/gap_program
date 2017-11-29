@@ -11,6 +11,7 @@ app = Flask(__name__)
 
 def process_manager():
     start_date = datetime.today()
+
     while True:
         # get next start date
         while start_date.strftime('%y%m%d') == NYSE_holidays()[0].strftime('%y%m%d') or start_date.weekday()>=5:
@@ -40,12 +41,16 @@ def process_manager():
 @app.route('/')
 def index():
     conn = sqlite3.connect('gap_data.db')
+    # get table names
+    table_names = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", conn).values
+
+    # get todays alerts
     today = datetime.now().strftime('%b %d, %Y')
     df = pd.read_sql('select * from alerts where Start_Date = "%s"' % today, conn)
 
     df = df[['Symbol', 'Play', 'Signal', 'Prediction', 'Vol_Chg', 'Wk', 'Mth','Start_Price']]
 
-    return render_template('index.html', todays_alerts=df.values, today=datetime.now().strftime('%B %d, %Y'))
+    return render_template('index.html', table_names=table_names, todays_alerts=df.values, today=datetime.now().strftime('%B %d, %Y'))
 
 
 if __name__ == '__main__':
@@ -56,7 +61,6 @@ if __name__ == '__main__':
 
     if app.config['DEBUG'] is False:
         scheduler.add_job(id='get_finviz_alerts',func='gap_site:process_manager')
-
         app.run(host='0.0.0.0', port=8080)
     else:
         app.run()

@@ -31,8 +31,8 @@ def get_changes(df):
         signal_date = str(df.ix[i,'Date']).split(' ')[0]
         signal = df.ix[i,'Percent_change']
         start_price = df.ix[i,'Open']
-        volume = df.ix[i,'Volume']
-        avg_vol = df.ix[i-61:i-1,'Volume'].mean()
+        volume = df.ix[i-1,'Volume']
+        avg_vol = df.ix[i-61:i-2,'Volume'].mean()
         change_in_vol = volume / avg_vol - 1
 
         change = [symbol, signal_date, signal, avg_vol, change_in_vol, start_price]

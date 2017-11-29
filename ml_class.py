@@ -1,7 +1,7 @@
 from sklearn.svm import SVR, SVC
+from sklearn.model_selection import train_test_split
 import pandas as pd
 import sqlite3
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import scale
 import numpy as np
 import matplotlib.pyplot as plt
@@ -23,6 +23,7 @@ class machine(object):
         self.gap_percentage = gap_percentage
         self.hold_days = str(hold_days)
         self.machine = machine
+        self.bins = 2
 
         self.main()
 
@@ -47,7 +48,7 @@ class machine(object):
         conn = sqlite3.connect('gap_data.db')
         df = pd.read_sql('select * from gap_data where "%s"<1 and "%s">-1 and Start_Price>2' % (self.hold_days, self.hold_days), conn)
 
-        df = df.ix[:,['Symbol', 'Date', 'Signal', 'Wk', 'Mth','Vol_Chg', self.hold_days]]
+        df = df.ix[:,['Symbol', 'Date', 'Signal', 'Wk', 'Mth', self.hold_days]]
 
         #df = df.fillna(df.mean())
 
@@ -63,8 +64,10 @@ class machine(object):
         self.df = df.dropna()
 
 
+
+
     def bin_data(self):
-        self.df['Bin'] = np.round(self.df[self.hold_days].rank(pct=True)*(4))
+        self.df['Bin'] = np.round(self.df[self.hold_days].rank(pct=True)*(self.bins))
 
     def get_machine(self, a_train, b_train):
         if self.machine=='Classifier':
@@ -92,29 +95,30 @@ class machine(object):
     def predict(self, a_test):
         try:
             predicted = self.clf.predict(a_test.ix[:,2:-1])
-        except:
+        except Exception as e:
             a_test.to_csv('bad_data_c.csv')
             return
         a_test['Predicted'] = predicted
         self.result_df = a_test
 
     def get_results(self):
-
+        """
         if self.sim_num == 0:
             self.result_df.to_csv('results/%s.csv' % self.machine_id)
-        if len(self.result_df[self.result_df['Predicted']==4]>8):
+        if len(self.result_df[self.result_df['Predicted']==self.bins]>8):
             histogram_df = self.result_df[['Predicted',self.hold_days]]
             dtf = histogram_df.boxplot(by='Predicted')
             dtf.plot()
             fig = dtf.get_figure()
             fig.savefig("histograms/%s_%s.png" % (self.machine_id, self.sim_num))
             plt.close()
+        """
 
         if self.machine=='Classifier':
             self.negative = self.result_df[self.result_df['Predicted']==0][self.hold_days]
-            self.positive = self.result_df[self.result_df['Predicted']==4][self.hold_days]
+            self.positive = self.result_df[self.result_df['Predicted']==self.bins][self.hold_days]
             self.cutoff_0 = 0
-            self.cutoff_1 = 4
+            self.cutoff_1 = self.bins
         elif self.machine=='Regression':
             self.result_df = self.result_df.sort_values(by='Predicted')
             self.negative = self.result_df.head(20)[self.hold_days]
@@ -128,10 +132,10 @@ class machine(object):
 
 if __name__ == '__main__':
     total_results = []
-    for gap_percentage in [.1]:
-        for gap_direction in ['both']:
+    for gap_percentage in [.05,.1]:
+        for gap_direction in ['up', 'down', 'both']:
             for hold_days in [1,2,3,4,5]:
-                for machine_type in ['Classifier']:
+                for machine_type in ['Classifier','Regression']:
 
                     negative_results = None
                     positive_results = None
@@ -157,6 +161,7 @@ if __name__ == '__main__':
 
 
     df = pd.DataFrame(total_results, columns = ['Machine', 'Cutoff_0', 'Cutoff_1', 'Neg_Count', 'Pos_Count','Neg_Median', 'Neg_Mean', 'Pos_Median', 'Pos_Mean'])
+    print(df)
     df = df[(df['Pos_Count']>8) & (df['Neg_Count']>8)]
     df['Diff_Median'] = (df['Neg_Median']-df['Pos_Median'])*-1
     df['Diff_Mean'] = (df['Neg_Mean']-df['Pos_Mean'])*-1

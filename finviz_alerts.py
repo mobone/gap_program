@@ -16,17 +16,6 @@ class finviz_alerts(object):
     runs their data through prediction, stores in database
     """
     def __init__(self):
-        # check if alerts have already been collected for today
-        # TODO
-        """
-        conn = sqlite3.connect('gap_data.db')
-        today = datetime.now().strftime('%b %d, %Y')
-        df = pd.read_sql('select * from alerts where Start_Date = "%s"' % today, conn)
-        if not df.empty:
-            return
-        """
-
-
         print("Getting alerts", datetime.now())
         self.get_alerts()
         conn = sqlite3.connect('gap_data.db')
@@ -46,7 +35,7 @@ class finviz_alerts(object):
             self.get_predictions()
             self.get_close_dates()
 
-            self.companies.to_sql(self.machine_id, conn, if_exists='replace', index=False)
+            self.companies.to_sql(self.machine_id, conn, if_exists='append', index=False)
 
     def get_close_dates(self):
         for company in self.companies.iterrows():
@@ -176,10 +165,7 @@ class closer(object):
         tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", conn)
         for table_name in tables.values:
             table_name = table_name[0]
-
-            print(table_name)
             try:
-                input()
                 df = pd.read_sql('select * from "%s" where Close_Date = "%s"' % (table_name, close_date), conn)
             except Exception as e:
                 print(e)
@@ -199,6 +185,3 @@ class closer(object):
                 cur = conn.cursor()
                 cur.execute('update alerts set Close_Price = %f, Percent_Change = %f where Symbol="%s" and Close_Date="%s"' % (close_price, percent_change, symbol, close_date))
             conn.commit()
-
-x = finviz_alerts()
-#x = closer()
