@@ -10,7 +10,7 @@ docs = eval(docs)['rows']
 urls = []
 for doc in docs:
     urls.append('http://mobone:C00kie32!@24.7.228.52:5984/finviz_data/' + doc['id'])
-    
+
 
 p = pool.Pool.from_urls(urls, num_processes=20)
 p.join_all()
@@ -64,8 +64,6 @@ for row in df.iterrows():
 
 df.to_csv("nosql_data_before.csv")
 df['Change'] = p2f(df['Change'])
-df.to_csv("nosql_data_before.csv")
-
 
 df['Week'], df['Month'] = df['Volatility'].str.split(' ',1).str
 df['52W Low'], df['52W High'] = df['52W Range'].str.split(' - ',1).str
@@ -99,7 +97,7 @@ for col in df.columns:
         df[col] = df[col].apply(pd.to_numeric)
     except:
         pass
-df.to_csv("nosql_data.csv")
+df.to_csv("nosql_data_longer.csv")
 
 
 
