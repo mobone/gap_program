@@ -52,7 +52,7 @@ class machine(Process):
 
             # take in the results from the experience and get stats about performance
             self.get_metrics()
-            
+
             # discard models with unsatisfactory metrics
             if self.metric_df['Pos_Mean'][0]<.025 or self.metric_df['Neg_Mean'][0]>-.025:
                 continue
@@ -61,11 +61,12 @@ class machine(Process):
                     continue
                 if len(self.positive)<self.sim_count*(self.trade_count-3):
                     continue
+            if self.metric_df['Diff_Mean'][0]<.05 or self.metric_df['Diff_Median'][0]<.03:
+                continue
 
             # save model if diff between neg predictions and pos predictions is great enough
             # this model is fit using 100% of the data, and will be used to make future predictions
-            if self.metric_df['Diff_Mean'][0]>.05 and self.metric_df['Diff_Median'][0]>.03:
-                self.save_model()
+            self.save_model()
 
             # store result in the database
             self.metric_df.to_sql('nosql_data_pruned', self.conn, if_exists='append',index=False)
@@ -154,8 +155,6 @@ class machine(Process):
                              self.data[self.target])
 
 
-
-
 if __name__ == '__main__':
     process_q = Queue()
 
@@ -175,7 +174,7 @@ if __name__ == '__main__':
 
     feature_set = []
     # permute all the different combinations of the possible features, of length 3 to n
-    for permute_length in range(3,4):
+    for permute_length in range(4,7):
         #hold stock for 4, 5 or 6 days, this is our target variable
         for num_days in range(4,6):
             # ability to change from Classifier and Regression models
@@ -189,7 +188,6 @@ if __name__ == '__main__':
     # put them in the queue
     for feature in feature_set:
         process_q.put(feature)
-
     print(process_q.qsize())
 
     # start the processors

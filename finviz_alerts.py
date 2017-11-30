@@ -16,26 +16,42 @@ class finviz_alerts(object):
     runs their data through prediction, stores in database
     """
     def __init__(self):
+
+        conn = sqlite3.connect('gap_data.db')
+        # get machines
+        sql = 'select * from nosql_data_pruned where Neg_Median<-.01 and Pos_Median>.01 order by diff_mean desc limit 20;'
+        machines = pd.read_sql(sql,conn).ix[:,['Features','Neg_Cutoff','Pos_Cutoff','Hold_Time']]
+
+        # get all features we might use
+        features_list = []
+        for machine in machines['Features'].values:
+            machine = machine.replace('\\','')
+            features_list.extend(machine.split('_'))
+
+        self.total_features_set = list(set(features_list))
+        self.get_backtest_dataset()
+
         print("Getting alerts", datetime.now())
         self.get_alerts()
-        conn = sqlite3.connect('gap_data.db')
-        machine_names = sorted(os.listdir('./models'))[1:]
-        original_companies = self.companies.copy()
-        for machine_name in machine_names:
-            self.companies = original_companies.copy()
-            machine_ids = machine_name.split('_')
-            self.machine_id = machine_name.replace("_both","").replace(".pkl","")
-            self.hold_days = int(machine_ids[3][:1])
-            self.cut_off = float(machine_ids[2])
+        self.company_data = pd.concat([self.total_dataset, self.company_data])
 
-            if self.cut_off == .1:
-                self.companies = self.companies[self.companies['Signal'].abs()>.1]
 
-            self.get_machines(machine_name)
+        for self.features,self.neg_cutoff,self.pos_cutoff,self.hold_days in machines.values:
+            self.features = '['+self.features.replace('\/','/').replace(' ',', ')+']'
+            print(self.features)
+
+            self.machine_id = [self.features.replace('/','-o-').replace(' ','-'),
+                               str(self.neg_cutoff), str(self.pos_cutoff)]
+            self.machine_id = '__'.join(self.machine_id)
+            print(self.machine_id)
+            input()
+
+            self.get_machine()
             self.get_predictions()
             self.get_close_dates()
 
-            self.companies.to_sql(self.machine_id, conn, if_exists='append', index=False)
+            self.companies.to_sql(self.machine_id.split('_')[0], conn, if_exists='append', index=False)
+            break
 
     def get_close_dates(self):
         for company in self.companies.iterrows():
@@ -53,20 +69,25 @@ class finviz_alerts(object):
             self.companies.loc[company[0],'Hold_Days'] = self.hold_days
 
     def get_predictions(self):
+        self.companies = self.company_data[self.features]
         self.companies = self.companies.dropna()
+        print(self.companies)
+        exit()
         self.companies['Play'] = None
         self.companies['Prediction'] = self.clf.predict(self.companies[['Signal', 'Wk', 'Mth', 'Vol_Chg']])
-        self.companies.loc[self.companies['Prediction']==0, 'Play'] = 'Short'
-        self.companies.loc[self.companies['Prediction']==4, 'Play'] = 'Long'
+        self.companies.loc[self.companies['Prediction']<self.neg_cutoff, 'Play'] = 'Short'
+        self.companies.loc[self.companies['Prediction']>self.pos_cutoff, 'Play'] = 'Long'
         self.companies = self.companies.dropna(subset=['Play'])
 
-    def get_machines(self, name):
-        self.clf = joblib.load('models/%s' % name)
+    def get_machine(self):
+        self.clf = joblib.load('models/%s.pkl' % self.machine_id)
 
+    def p2f(self,x):
+        return x.str.strip('%').astype(float)/100
 
     def get_alerts(self):
-        url_up = 'https://finviz.com/screener.ashx?v=111&f=sh_avgvol_o500,sh_opt_short,ta_perf_d5o&ft=3&r='
-        url_down = 'https://finviz.com/screener.ashx?v=111&f=sh_avgvol_o500,sh_opt_short,ta_perf_d5u&ft=3&r='
+        url_up = 'https://finviz.com/screener.ashx?v=111&f=sh_avgvol_o300,sh_opt_short,ta_perf_d5o&ft=3&r='
+        url_down = 'https://finviz.com/screener.ashx?v=111&f=sh_avgvol_o300,sh_opt_short,ta_perf_d5u&ft=3&r='
 
         # get total pages
         up_count = int(re.findall(b'Total: </b>[0-9]*', r.get(url_up).content)[0].split(b'>')[1])
@@ -83,6 +104,8 @@ class finviz_alerts(object):
                     df = pd.read_html(finviz_page[start:end], header=0)[0]
                 else:
                     df = df.append(pd.read_html(finviz_page[start:end], header=0)[0])
+                break
+            break
 
         df = df.reset_index()
 
@@ -94,33 +117,40 @@ class finviz_alerts(object):
         p = pool.Pool.from_urls(urls, num_processes=20)
         p.join_all()
 
-        companies = []
+        # generate total company df
+        self.company_data = []
+        index_num = 0
         for response in p.responses():
-            company = self.get_company_data(response)
-            companies.append(company)
+            symbol = response.request_kwargs['url'].split('=')[1]
+            start = response.content.find(b'snapshot-table2')-200
+            end = response.content.find(b'</table>',start+300)
+            df = pd.read_html(response.content[start:end])[0]
+            df = pd.DataFrame(df.values.reshape(-1, 2), columns=['key', index_num])
+            df = df.set_index('key').T
+            df = df[self.total_features_set]
+            df = df.replace('-', df.replace(['-'], [None]))
+            df['Ticker'] = symbol
+            self.company_data.append(df)
+            index_num+=1
+        self.company_data = pd.concat(self.company_data)
 
-        self.companies = pd.DataFrame(companies, columns = ['Symbol', 'Start_Date', 'Signal', 'Avg_Vol', 'Vol', 'Vol_Chg', 'Wk', 'Mth', 'Qtr', 'Start_Price'])
-        self.companies = self.companies[self.companies['Start_Price']>2]
+        # format data
+        for col in self.company_data.columns[:-1]:
+            if self.company_data[col].str.contains('%').any():
+                self.company_data[col] = self.p2f(self.company_data[col])
+            self.company_data[col] = self.company_data[col].apply(pd.to_numeric)
+        print(self.company_data)
 
-
-
+    def get_backtest_dataset(self):
+        df = pd.read_csv('nosql_data.csv')
+        df.index.name = 'Index'
+        col_str = str(df.columns).replace('\/','/').split('[')[1].split(']')[0]
+        df.columns = eval('['+col_str+']')
+        self.total_dataset = df[self.total_features_set]
 
     def get_company_data(self, response):
         # formats all the other related data
-        start = response.content.find(b'snapshot-table2')-200
-        end = response.content.find(b'</table>',start+300)
-        df = pd.read_html(response.content[start:end])[0]
 
-        finviz_data = None
-        for i in range(0,len(df.columns),2):
-            table_section = df.ix[:,i:i+1]
-            table_section.columns = ['Key', 'Value']
-            table_section.index = table_section['Key']
-            table_section = table_section['Value']
-            if finviz_data is None:
-                finviz_data = table_section
-            else:
-                finviz_data = finviz_data.append(table_section)
         #'Symbol', 'Date', 'Signal', 'Wk', 'Mth', 'Vol_Chg',
         symbol = response.request_kwargs['url'].split('=')[1]
         date = datetime.now().strftime("%b %d, %Y")
@@ -185,3 +215,4 @@ class closer(object):
                 cur = conn.cursor()
                 cur.execute('update alerts set Close_Price = %f, Percent_Change = %f where Symbol="%s" and Close_Date="%s"' % (close_price, percent_change, symbol, close_date))
             conn.commit()
+finviz_alerts()
