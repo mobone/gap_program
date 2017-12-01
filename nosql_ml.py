@@ -41,14 +41,9 @@ class machine(Process):
             self.predictions_pos = []
 
             # run n experiements
-            for self.sim_num in range(self.sim_count):
-                self.get_data()     # splits data into random train/test splits
-                self.get_model()    # trains the Classifier or Regression model
-                self.get_predictions()  # uses the test input to get output predictions
-
-                # discard the model if its regression and producing only one prediction
-                if len(set(self.predictions))<5 and self.machine=='Regression':
-                    break
+            exp_result = self.run_experiments(self.sim_count)
+            if exp_result == False:
+                continue
 
             # take in the results from the experience and get stats about performance
             self.get_metrics()
@@ -63,6 +58,8 @@ class machine(Process):
                     continue
             if self.metric_df['Diff_Mean'][0]<.05 or self.metric_df['Diff_Median'][0]<.03:
                 continue
+            if self.metrid_df['Neg_Cutoff']==self.metrid_df['Pos_Cutoff']:
+                continue
 
             # save model if diff between neg predictions and pos predictions is great enough
             # this model is fit using 100% of the data, and will be used to make future predictions
@@ -70,6 +67,18 @@ class machine(Process):
 
             # store result in the database
             self.metric_df.to_sql('nosql_data_pruned', self.conn, if_exists='append',index=False)
+
+    def run_experiments(self, sim_count):
+        for self.sim_num in range(sim_count):
+            for self.model_type in ['Negative','Positive']:
+                self.get_data()     # splits data into random train/test splits
+                self.get_model()    # trains the Classifier or Regression model
+                self.get_predictions()  # uses the test input to get output predictions
+
+                # discard the model if its regression and producing only one prediction
+                if len(set(self.predictions))<5 and self.machine=='Regression':
+                    return False
+        return True
 
     def get_data(self):
         if self.machine=='Classifier':
