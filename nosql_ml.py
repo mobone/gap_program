@@ -39,7 +39,6 @@ class machine(Process):
             self.predictions_pos = []
 
             # run n experiements
-
             exp_results = self.run_experiments(self.sim_count)
             if exp_results == False:
                 continue
@@ -59,8 +58,6 @@ class machine(Process):
                     continue
 
             if self.metric_df['Pos_Cutoff'][0]==self.metric_df['Neg_Cutoff'][0]:
-                continue
-            if self.metrid_df['Neg_Cutoff']==self.metrid_df['Pos_Cutoff']:
                 continue
 
             #if self.metric_df['Diff_Mean'][0]<.05 or self.metric_df['Diff_Median'][0]<.03:
@@ -103,18 +100,6 @@ class machine(Process):
         return True
 
 
-
-    def run_experiments(self, sim_count):
-        for self.sim_num in range(sim_count):
-            for self.model_type in ['Negative','Positive']:
-                self.get_data()     # splits data into random train/test splits
-                self.get_model()    # trains the Classifier or Regression model
-                self.get_predictions()  # uses the test input to get output predictions
-
-                # discard the model if its regression and producing only one prediction
-                if len(set(self.predictions))<5 and self.machine=='Regression':
-                    return False
-        return True
 
     def get_data(self):
         self.change_needed = 'Change' not in self.features
