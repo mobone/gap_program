@@ -1,12 +1,10 @@
 import requests as r
-import requests_cache
 import pandas as pd
 from requests_toolbelt.threaded import pool
 
-requests_cache.install_cache('nosql_cache')
 docs = r.get('http://mobone:C00kie32!@24.7.228.52:5984/finviz_data/_all_docs').content
 docs = eval(docs)['rows']
-
+print(len(docs))
 urls = []
 for doc in docs:
     urls.append('http://mobone:C00kie32!@24.7.228.52:5984/finviz_data/' + doc['id'])
@@ -56,26 +54,18 @@ for row in df.iterrows():
     cur_date_index = int(price_df[price_df['Date']==date].index.values[0])
 
 
-    for i in range(cur_date_index+1,cur_date_index+6):
+    for i in range(cur_date_index+1,cur_date_index+8):
         try:
             df.loc[row[0], 'Day '+str(i-cur_date_index)] = (price_df.loc[i]['Price'] / start_price) - 1
         except:
             pass
 
-df.to_csv("nosql_data_before.csv")
 df['Change'] = p2f(df['Change'])
 
 df['Week'], df['Month'] = df['Volatility'].str.split(' ',1).str
 df['52W Low'], df['52W High'] = df['52W Range'].str.split(' - ',1).str
 df = df.drop(['52W Range', 'Volatility', '_rev', '_id'], axis=1)
 df = df.replace('-', df.replace(['-'], [None]))
-
-# remove features that have too many nans
-null_counts = df.isnull().sum()
-too_many = float(len(df))*.3
-
-null_counts = null_counts[null_counts<too_many]
-df = df[null_counts.index.values]
 
 for col in df.columns:
     try:
@@ -101,7 +91,7 @@ df.to_csv("nosql_data_longer.csv")
 
 
 
-corr = df.corr()[['Day 1','Day 2','Day 3','Day 4','Day 5']].dropna().sort_values(by=['Day 5'])
+corr = df.corr()[['Day 3','Day 4','Day 5','Day 6','Day 7']].dropna().sort_values(by=['Day 5'])
 print(corr)
 corr.to_csv('corr.csv')
 print('complete')

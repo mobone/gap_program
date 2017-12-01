@@ -47,7 +47,6 @@ Temporary Items
 .apdisk
 
 *.png
-*.db
 *.db-journal
 models/
 results/
