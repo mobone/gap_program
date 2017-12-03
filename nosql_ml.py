@@ -57,22 +57,23 @@ class machine(Process):
                 max_diff = self.metric_df['Diff_Mean'][0]
 
             # store result in the database
-            self.metric_df.to_sql('nosql_data_machines_pruned_2', self.conn, if_exists='append',index=False)
+            self.metric_df.to_sql('nosql_data_machines_pruned_3', self.conn, if_exists='append',index=False)
 
     def filter_experiment(self):
         # discard models with unsatisfactory metrics
         if self.metric_df['Pos_Mean'][0]<.025 or self.metric_df['Neg_Mean'][0]>-.025:
-            continue
+            return False
         if self.metric_df['Pos_Median'][0]<.02 or self.metric_df['Neg_Median'][0]>-.02:
-            continue
+            return False
         if self.machine=='Classifier':
             if len(self.negative)<self.sim_count*(self.trade_count-3):
-                continue
+                return False
             if len(self.positive)<self.sim_count*(self.trade_count-3):
-                continue
+                return False
 
-        if self.metric_df['Pos_Cutoff'][0]==self.metric_df['Neg_Cutoff'][0]:
-            continue
+        if self.metric_df['Pos_Cutoff_Min'][0]==self.metric_df['Neg_Cutoff_Max'][0]:
+            return False
+        return True
 
     def run_experiments(self, sim_count):
         for self.sim_num in range(sim_count):
@@ -188,11 +189,13 @@ class machine(Process):
 
         row = [self.machine, '_'.join(self.features)]
         row.extend([metrics['max']['Neg_Cutoff'], metrics['min']['Pos_Cutoff'],
-                   metrics['count']['Negative'], metrics['count']['Negative'],
-                   metrics['mean']['Negative'], metrics['50%']['Negative'],
-                   metrics['mean']['Positive'], metrics['50%']['Positive']])
+                    metrics['mean']['Neg_Cutoff'], metrics['mean']['Pos_Cutoff'],
+                    metrics['count']['Negative'], metrics['count']['Negative'],
+                    metrics['mean']['Negative'], metrics['50%']['Negative'],
+                    metrics['mean']['Positive'], metrics['50%']['Positive']])
 
-        df = pd.DataFrame([row], columns = ['Machine_Type','Features', 'Neg_Cutoff', 'Pos_Cutoff',
+        df = pd.DataFrame([row], columns = ['Machine_Type','Features', 'Neg_Cutoff_Max', 'Pos_Cutoff_Min',
+                                            'Neg_Cutoff_Mean', 'Pos_Cutoff_Mean',
                                             'Neg_Count','Pos_Count', 'Neg_Mean',
                                             'Neg_Median', 'Pos_Mean', 'Pos_Median'])
         df['Diff_Mean'] = df['Pos_Mean'] + (df['Neg_Mean']*-1)
@@ -214,13 +217,14 @@ if __name__ == '__main__':
     features = ['52W Low', 'EPS (ttm)', 'EPS Q\/Q', 'Inst Trans', 'Perf Month',
     'Perf Quarter', 'Perf Week', 'Perf Year', 'ROA', 'RSI (14)', 'Recom',
     'Rel Volume', 'SMA20', 'SMA200', 'SMA50', 'Sales Q\/Q', 'Volume', 'Month']
+
     # ability to toggle preset features vs finding those that have the highest correlation
     if features is None:
         correls = pd.read_csv('corr.csv')
         correls.index = correls[correls.columns[0]]
         correls = correls.ix[:-5]
 
-        for num_days in range(4,8):
+        for num_days in range(5,8):
             corr = pd.DataFrame(correls.ix[:,'Day '+str(num_days)])
             if features is None:
                 features = list(corr[corr['Day '+str(num_days)].abs() >.03].index)
@@ -236,9 +240,9 @@ if __name__ == '__main__':
     process_started = False
     feature_set = []
     # permute all the different combinations of the possible features, of length 3 to n
-    for permute_length in range(4,7):
+    for permute_length in range(6,7):
         #hold stock for 4, 5 or 6 days, this is our target variable
-        for num_days in range(4,8):
+        for num_days in range(5,8):
             # ability to change from Classifier and Regression models
             for machine_type in ['Regression']:
                 for model_class in ['Single','Dual']:
@@ -252,7 +256,7 @@ if __name__ == '__main__':
 
     if process_started==False:
         # start the processors
-        for process_id in range(1):
+        for process_id in range(8):
             #print("starting", process_id)
             p = machine(process_q)
             p.start()
