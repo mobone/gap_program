@@ -21,8 +21,8 @@ class finviz_alerts(object):
         conn = sqlite3.connect('gap_data.db')
         results_conn = sqlite3.connect('alerts.db')
         # get machines
-        sql = 'select * from nosql_data_machines_pruned_2 order by diff_mean desc limit 25;'
-        machines = pd.read_sql(sql,conn).ix[:,['Features','Neg_Cutoff','Pos_Cutoff','Hold_Time', 'Model_Type']]
+        sql = 'select * from nosql_data_machines_pruned_3 order by diff_mean desc limit 25;'
+        machines = pd.read_sql(sql,conn).ix[:,['Features','Neg_Cutoff_Mean','Pos_Cutoff_Mean','Hold_Time', 'Model_Type']]
 
         # save machines to another table
         machines.to_sql('selected_models', results_conn, if_exists='replace', index=False)
@@ -48,15 +48,16 @@ class finviz_alerts(object):
             self.hold_days = int(self.hold_days.split(' ')[1])
             self.features = self.features.replace('\/','/').split('_')
             print(self.model_type, self.features, self.hold_days, self.neg_cutoff, self.pos_cutoff)
-            self.machine_id = ['_'.join(self.features)]
-            #self.machine_id = '__'.join(self.machine_id)
+            self.machine_id = ['_'.join(self.features).replace('/','-o-').replace(' ','-'),
+                               str(self.neg_cutoff), str(self.pos_cutoff)]
+            self.machine_id = '__'.join(self.machine_id)
 
             self.get_machine()
             self.get_predictions()
             self.get_close_dates()
             print('Alerts Len:', len(self.companies))
-
-            self.companies.to_sql(self.machine_id, results_conn, if_exists='replace', index=False)
+            print(self.machine_id)
+            self.companies.to_sql(self.machine_id, results_conn, if_exists='append', index=False)
 
 
     def get_close_dates(self):
