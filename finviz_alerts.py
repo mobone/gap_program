@@ -209,7 +209,7 @@ class closer(object):
     def __init__(self):
         print("Getting close prices", datetime.now())
         # get closing companies
-        conn = sqlite3.connect('gap_data.db')
+        conn = sqlite3.connect('alerts.db')
         close_date = datetime.now().strftime('%b %d, %Y')
         tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", conn)
         for table_name in tables.values:
@@ -235,5 +235,5 @@ class closer(object):
                 cur.execute('update alerts set Close_Price = %f, Percent_Change = %f where Symbol="%s" and Close_Date="%s"' % (close_price, percent_change, symbol, close_date))
             conn.commit()
 
-finviz_alerts()
+#finviz_alerts()
 #closer()
