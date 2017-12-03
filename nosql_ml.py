@@ -27,7 +27,7 @@ class machine(Process):
         self.original_data = pd.read_csv('nosql_data_longer.csv')
         max_diff = 0
         # iterate over the process queue
-        while not self.process_q.empty():
+        while True:
             self.target,self.model_class,self.machine,self.features = self.process_q.get()
 
             self.features = list(self.features)
@@ -47,7 +47,7 @@ class machine(Process):
             self.get_metrics()
 
             # discard models with unsatisfactory metrics
-            if self.metric_df['Pos_Mean'][0]<.02 or self.metric_df['Neg_Mean'][0]>-.02:
+            if self.metric_df['Pos_Mean'][0]<.025 or self.metric_df['Neg_Mean'][0]>-.025:
                 continue
             if self.metric_df['Pos_Median'][0]<.02 or self.metric_df['Neg_Median'][0]>-.02:
                 continue
@@ -70,7 +70,7 @@ class machine(Process):
             #self.save_model()
 
             # store result in the database
-            self.metric_df.to_sql('nosql_data_machines', self.conn, if_exists='append',index=False)
+            self.metric_df.to_sql('nosql_data_machines_pruned', self.conn, if_exists='append',index=False)
 
     def run_experiments(self, sim_count):
         for self.sim_num in range(sim_count):
@@ -226,47 +226,70 @@ if __name__ == '__main__':
                 'P\/S', 'EPS next 5Y', 'Perf YTD', 'P\/B', 'Sales past 5Y',
                 'RSI (14)', 'Perf Quarter', 'SMA20', 'Recom', 'EPS past 5Y',
                 'ROI', 'Change', 'Perf Year']
-
+    features = ['52W High','ROE','SMA200','Change','Insider Own','Book\/sh',
+                'SMA50','EPS this Y','Rel Volume','Short Float','Debt\/Eq','ROA',
+                'EPS next Q','ROI','Cash\/sh','P\/S','Short Ratio','P\/FCF',
+                'Gross Margin','Perf Half Y','Perf YTD','Perf Year',
+                'Sales past 5Y','LT Debt\/Eq','Perf Quarter','EPS Q\/Q',
+                'Quick Ratio','Month','Perf Week','Sales Q\/Q','EPS next 5Y',
+                'EPS (ttm)','Week','Insider Trans','Beta','Profit Margin']
     # ability to toggle preset features vs finding those that have the highest correlation
     if features is None:
         correls = pd.read_csv('corr.csv')
         correls.index = correls[correls.columns[0]]
         correls = correls.ix[:-5]
-        corr = pd.DataFrame(correls.ix[:,'Day '+str(i)])
-        features = list(corr[corr['Day '+str(i)].abs() >.03].index)
 
+        for num_days in range(4,8):
+            corr = pd.DataFrame(correls.ix[:,'Day '+str(num_days)])
+            if features is None:
+                features = list(corr[corr['Day '+str(num_days)].abs() >.03].index)
+            else:
+                features.extend(list(corr[corr['Day '+str(num_days)].abs() >.03].index))
 
-    feature_set = []
+    features = list(set(features))
+    if 'Volume' in features: features.remove('Volume')
+    if 'Avg Volume' in features: features.remove('Avg Volume')
+    if 'Income' in features: features.remove('Income')
+    print(features)
+    print(len(features))
+    process_started = False
     # permute all the different combinations of the possible features, of length 3 to n
     for permute_length in range(4,7):
         #hold stock for 4, 5 or 6 days, this is our target variable
         for num_days in range(4,8):
             # ability to change from Classifier and Regression models
             for machine_type in ['Regression']:
+                feature_set = []
                 for model_class in ['Single','Dual']:
                     for feature in list(itertools.permutations(features[:-1], r=permute_length)):
                         feature_set.append(['Day '+str(num_days),model_class, machine_type,feature])
+                print('New Feature set:', len(feature_set), 'Premute Len:',permute_length, 'Days: ',num_days)
+                # shuffle the list so that the multiprocessing can discover good vs bad models randomly
+                shuffle(feature_set)
 
-    # shuffle the list so that the multiprocessing can discover good vs bad models randomly
-    shuffle(feature_set)
-    print(len(feature_set))
+                if process_started==False:
+                    # start the processors
+                    for process_id in range(7):
+                        #print("starting", process_id)
+                        p = machine(process_q)
+                        p.start()
+                    process_started = True
 
-    # start the processors
-    for process_id in range(2):
-        print("starting")
-        p = machine(process_q)
-        p.start()
+                # put them in the queue
+                #list = [process_q.put(feature) for feature in feature_set]
+                while len(feature_set):
+                    process_q.put(feature_set.pop())
+                del feature_set
 
-
-
-    # put them in the queue
-    list = [process_q.put(feature) for feature in feature_set]
-
-    # wait for the queue to empty
-    while not process_q.empty():
-        sleep(60)
-        print('im')
+                # wait for the queue to empty
+                previous = process_q.qsize()
+                while not process_q.empty():
+                    sleep(600)
+                    try:
+                        print(process_q.qsize(), previous-process_q.qsize())
+                    except:
+                        pass
 
     # if ctrl+c is encountered, the queue must be cleared before terminating
-    while process_q.qsize():
+    while not process_q.empty():
         process_q.get()

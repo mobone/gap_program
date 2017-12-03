@@ -1,3 +1,4 @@
+from sklearn.svm import SVR, SVC
 import pandas as pd
 import requests as r
 from requests_toolbelt.threaded import pool
@@ -19,8 +20,11 @@ class finviz_alerts(object):
     def __init__(self):
         conn = sqlite3.connect('gap_data.db')
         # get machines
-        sql = 'select * from nosql_data_pruned where Neg_Median<-.01 and Pos_Median>.01 order by diff_mean desc limit 25;'
-        machines = pd.read_sql(sql,conn).ix[:,['Features','Neg_Cutoff','Pos_Cutoff','Hold_Time']]
+        sql = 'select * from nosql_data_machines_pruned order by diff_mean desc limit 25;'
+        machines = pd.read_sql(sql,conn).ix[:,['Features','Neg_Cutoff','Pos_Cutoff','Hold_Time', 'Model_Type']]
+
+        # save machines to another table
+        machines.to_sql('selected_models', conn, if_exists='replace')
 
         # get all features we might use
         features_list = []
@@ -29,13 +33,18 @@ class finviz_alerts(object):
             features_list.extend(machine.split('_'))
         self.total_features_set = list(set(features_list))
 
+        if 'Change' not in self.total_features_set:
+            self.features.extend(['Change'])
+
+        print(self.total_features_set)
+
         self.get_backtest_dataset()
 
         print("Getting alerts", datetime.now())
         self.get_alerts()
-        self.company_data = pd.concat([self.total_dataset, self.company_data])
+        self.company_data = pd.concat([self.backtest_dataset, self.company_data])
 
-        for self.features,self.neg_cutoff,self.pos_cutoff,self.hold_days in machines.values:
+        for self.features,self.neg_cutoff,self.pos_cutoff,self.hold_days,self.model_type in machines.values:
             self.hold_days = int(self.hold_days.split(' ')[1])
             self.features = self.features.replace('\/','/').split('_')
             self.machine_id = ['_'.join(self.features).replace('/','-o-').replace(' ','-'),
@@ -73,8 +82,34 @@ class finviz_alerts(object):
         self.companies = self.companies.dropna(subset=['Play','Ticker'])
         self.companies.index = self.companies['Ticker']
 
+    def get_model_data(self):
+        print(self.features)
+        # select the data specific to this feature set
+        if self.model_type == 'Single':
+            self.model_data, self.target_data = (preprocessing.scale(self.backtest_dataset[self.features]),
+                                          self.backtest_dataset[self.hold_days])
+        elif self.model_type == 'Dual':
+            positive_set = self.backtest_dataset[self.backtest_dataset['Change']>0]
+            negative_set = self.backtest_dataset[self.backtest_dataset['Change']<0]
+
+            self.positive_model_data, self.target_data = (preprocessing.scale(positive_set[self.features]),
+                                                                             positive_set[self.hold_days])
+            self.negative_model_data, self.target_data = (preprocessing.scale(negative_set[self.features]),
+                                                                             positive_set[self.hold_days])
+
+
     def get_machine(self):
-        self.clf = joblib.load('models/%s.pkl' % self.machine_id)
+        self.get_model_data()
+        if self.model_type == 'Single':
+            self.clf = SVR(C=1.0, epsilon=0.2) # regression only
+            self.clf.fit(self.model_data, self.target_data)
+        elif self.model_type == 'Dual':
+            self.positive_clf = SVR(C=1.0, epsilon=0.2) # regression only
+            self.positive_clf = SVR(C=1.0, epsilon=0.2) # regression only
+            self.positive_clf.fit(self.positive_model_data, self.target_data)
+            self.negative_clf.fit(self.negative_model_data, self.target_data)
+
+
 
     def p2f(self,x):
         return x.str.strip('%').astype(float)/100
@@ -98,6 +133,8 @@ class finviz_alerts(object):
                     df = pd.read_html(finviz_page[start:end], header=0)[0]
                 else:
                     df = df.append(pd.read_html(finviz_page[start:end], header=0)[0])
+                break
+            break
         df = df.reset_index()
 
         # get all the quotes relating to each stock, for other related data
@@ -117,6 +154,8 @@ class finviz_alerts(object):
             df = pd.read_html(response.content[start:end])[0]
             df = pd.DataFrame(df.values.reshape(-1, 2), columns=['key', index_num])
             df = df.set_index('key').T
+            df['Week'], df['Month'] = df['Volatility'].str.split(' ',1).str
+
             df = df[self.total_features_set+['Price']]
             df = df.replace('-', df.replace(['-'], [None]))
             df['Ticker'] = symbol
@@ -132,11 +171,11 @@ class finviz_alerts(object):
             self.company_data[col] = self.company_data[col].apply(pd.to_numeric)
 
     def get_backtest_dataset(self):
-        df = pd.read_csv('nosql_data.csv')
+        df = pd.read_csv('nosql_data_longer.csv')
         df.index.name = 'Index'
         col_str = str(df.columns).replace('\/','/').split('[')[1].split(']')[0]
         df.columns = eval('['+col_str+']')
-        self.total_dataset = df[self.total_features_set]
+        self.backtest_dataset = df[self.total_features_set]
 
     def convert_to_float(self, value):
         if 'K' in value:
@@ -177,5 +216,5 @@ class closer(object):
                 cur.execute('update alerts set Close_Price = %f, Percent_Change = %f where Symbol="%s" and Close_Date="%s"' % (close_price, percent_change, symbol, close_date))
             conn.commit()
 
-#finviz_alerts()
+finviz_alerts()
 #closer()
