@@ -18,7 +18,7 @@ def process_manager():
             start_date = start_date + timedelta(days=1)
 
         # sleep until 9am
-        finviz_alert_start = start_date.strftime('%Y-%m-%d') + ' 9:30:00'
+        finviz_alert_start = start_date.strftime('%Y-%m-%d') + ' 14:30:00'
         print('Next alert time: ',finviz_alert_start)
         while datetime.now()<datetime.strptime(finviz_alert_start, '%Y-%m-%d %H:%M:%S'):
             sleep(5)
@@ -27,7 +27,7 @@ def process_manager():
         except Exception as e:
             print(e)
 
-        closer_start = start_date.strftime('%Y-%m-%d') + ' 15:05:00'
+        closer_start = start_date.strftime('%Y-%m-%d') + ' 14:40:00'
         print('Next close time: ',closer_start)
         while datetime.now()<datetime.strptime(closer_start, '%Y-%m-%d %H:%M:%S'):
             sleep(5)
@@ -40,7 +40,7 @@ def process_manager():
 
 @app.route('/')
 def index():
-    conn = sqlite3.connect('gap_data.db')
+    conn = sqlite3.connect('alerts.db')
     # get table names
     table_names = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", conn).values
 
@@ -61,6 +61,6 @@ if __name__ == '__main__':
 
     if app.config['DEBUG'] is False:
         scheduler.add_job(id='get_finviz_alerts',func='gap_site:process_manager')
-        app.run(host='0.0.0.0', port=8080)
+        app.run(host='0.0.0.0', port=8090)
     else:
         app.run()

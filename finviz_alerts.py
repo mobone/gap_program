@@ -181,11 +181,12 @@ class finviz_alerts(object):
             self.company_data.append(df)
             index_num+=1
         self.company_data = pd.concat(self.company_data)
-
+        print(self.company_data)
         # format data
         for col in self.company_data[self.total_features_set+['Change']]:
             if self.company_data[col].str.contains('%').any():
                 self.company_data[col] = self.p2f(self.company_data[col])
+            print(col)
             self.company_data[col] = self.company_data[col].apply(pd.to_numeric)
 
     def get_backtest_dataset(self):
@@ -235,5 +236,5 @@ class closer(object):
                 cur.execute('update alerts set Close_Price = %f, Percent_Change = %f where Symbol="%s" and Close_Date="%s"' % (close_price, percent_change, symbol, close_date))
             conn.commit()
 
-#finviz_alerts()
+finviz_alerts()
 #closer()
