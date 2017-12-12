@@ -216,7 +216,7 @@ class finviz_alerts(object):
 class closer(object):
     def __init__(self):
         for table_name in ['alerts.db', 'alerts_first_week.db']:
-            print("Getting close prices", datetime.now())
+            print("Getting close prices for", table_name, datetime.now())
             # get closing companies
             conn = sqlite3.connect(table_name)
             close_date = datetime.now().strftime('%b %d, %Y')
@@ -261,7 +261,7 @@ class closer(object):
                     analysis.append([symbol, play, change])
 
                     cur.execute(sql)
-                """
+
                 analysis = pd.DataFrame(analysis, columns = ['Symbol', 'Play', 'Change'])
                 for play in set(analysis['Play']):
 
@@ -269,9 +269,9 @@ class closer(object):
                     desc = this_analysis.describe()
                     print(play, desc['Change']['count'], desc['Change']['50%'], desc['Change']['mean'], end = ' ')
                 print()
-                """
+
                 conn.commit()
 
 
 #finviz_alerts()
-#closer()
+closer()
