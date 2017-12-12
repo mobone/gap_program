@@ -215,61 +215,62 @@ class finviz_alerts(object):
 
 class closer(object):
     def __init__(self):
-        print("Getting close prices", datetime.now())
-        # get closing companies
-        conn = sqlite3.connect('alerts.db')
-        close_date = datetime.now().strftime('%b %d, %Y')
-        tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", conn)
-        for table_name in tables.values:
-            table_name = table_name[0]
-            #print(table_name)
-            try:
-                df = pd.read_sql('select * from "%s" where Close_Date >= "%s"' % (table_name, close_date), conn)
-            except Exception as e:
-                continue
-
-            urls = []
-            for symbol in df['Ticker']:
-                urls.append('https://finviz.com/quote.ashx?t=' + symbol)
-            p = pool.Pool.from_urls(urls, num_processes=20)
-            p.join_all()
-            analysis = []
-            for response in p.responses():
-                symbol = response.request_kwargs['url'].split('=')[1]
-                start = response.content.find(b'snapshot-table2')-200
-                end = response.content.find(b'</table>',start+300)
-                finviz_df = pd.read_html(response.content[start:end])[0]
-
-                if len(df[df['Ticker']==symbol])>1:
+        for table_name in ['alerts.db', 'alerts_first_week.db']:
+            print("Getting close prices", datetime.now())
+            # get closing companies
+            conn = sqlite3.connect(table_name)
+            close_date = datetime.now().strftime('%b %d, %Y')
+            tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", conn)
+            for table_name in tables.values:
+                table_name = table_name[0]
+                #print(table_name)
+                try:
+                    df = pd.read_sql('select * from "%s" where Close_Date >= "%s"' % (table_name, close_date), conn)
+                except Exception as e:
                     continue
 
-                start_price = float(df[df['Ticker']==symbol]['Price'].values[0])
-                play = df[df['Ticker']==symbol]['Play'].values[0]
+                urls = []
+                for symbol in df['Ticker']:
+                    urls.append('https://finviz.com/quote.ashx?t=' + symbol)
+                p = pool.Pool.from_urls(urls, num_processes=20)
+                p.join_all()
+                analysis = []
+                for response in p.responses():
+                    symbol = response.request_kwargs['url'].split('=')[1]
+                    start = response.content.find(b'snapshot-table2')-200
+                    end = response.content.find(b'</table>',start+300)
+                    finviz_df = pd.read_html(response.content[start:end])[0]
 
-                close_price = float(finviz_df.loc[10,11])
+                    if len(df[df['Ticker']==symbol])>1:
+                        continue
 
-                if play=='Long':
-                    change = (close_price-start_price)/close_price
-                elif play=='Short':
-                    change = ((close_price-start_price)/close_price)*-1
+                    start_price = float(df[df['Ticker']==symbol]['Price'].values[0])
+                    play = df[df['Ticker']==symbol]['Play'].values[0]
 
-                #print(symbol, play, start_price, close_price, change)
+                    close_price = float(finviz_df.loc[10,11])
 
-                cur = conn.cursor()
-                sql = 'update "%s" set Close_Price = %f, Percent_Change = %f where Ticker = "%s"' % (table_name,close_price, change, symbol)
-                analysis.append([symbol, play, change])
+                    if play=='Long':
+                        change = (close_price-start_price)/close_price
+                    elif play=='Short':
+                        change = ((close_price-start_price)/close_price)*-1
 
-                cur.execute(sql)
-            """
-            analysis = pd.DataFrame(analysis, columns = ['Symbol', 'Play', 'Change'])
-            for play in set(analysis['Play']):
+                    #print(symbol, play, start_price, close_price, change)
 
-                this_analysis = analysis[analysis['Play']==play]
-                desc = this_analysis.describe()
-                print(play, desc['Change']['count'], desc['Change']['50%'], desc['Change']['mean'], end = ' ')
-            print()
-            """
-            conn.commit()
+                    cur = conn.cursor()
+                    sql = 'update "%s" set Close_Price = %f, Percent_Change = %f where Ticker = "%s"' % (table_name,close_price, change, symbol)
+                    analysis.append([symbol, play, change])
+
+                    cur.execute(sql)
+                """
+                analysis = pd.DataFrame(analysis, columns = ['Symbol', 'Play', 'Change'])
+                for play in set(analysis['Play']):
+
+                    this_analysis = analysis[analysis['Play']==play]
+                    desc = this_analysis.describe()
+                    print(play, desc['Change']['count'], desc['Change']['50%'], desc['Change']['mean'], end = ' ')
+                print()
+                """
+                conn.commit()
 
 
 #finviz_alerts()

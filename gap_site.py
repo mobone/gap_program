@@ -18,7 +18,7 @@ def process_manager():
             start_date = start_date + timedelta(days=1)
 
         # sleep until 9am
-        finviz_alert_start = start_date.strftime('%Y-%m-%d') + ' 14:30:00'
+        finviz_alert_start = start_date.strftime('%Y-%m-%d') + ' 14:00:00'
         print('Next alert time: ',finviz_alert_start)
         while datetime.now()<datetime.strptime(finviz_alert_start, '%Y-%m-%d %H:%M:%S'):
             sleep(5)
@@ -27,7 +27,7 @@ def process_manager():
         except Exception as e:
             print(e)
 
-        closer_start = start_date.strftime('%Y-%m-%d') + ' 14:40:00'
+        closer_start = start_date.strftime('%Y-%m-%d') + ' 15:01:00'
         print('Next close time: ',closer_start)
         while datetime.now()<datetime.strptime(closer_start, '%Y-%m-%d %H:%M:%S'):
             sleep(5)
@@ -38,19 +38,36 @@ def process_manager():
         start_date = start_date + timedelta(days=1)
 
 
-@app.route('/')
-def index():
+@app.route('/', methods=['GET', 'POST'])
+def index(this_table_name=None):
+
     conn = sqlite3.connect('alerts.db')
     # get table names
-    table_names = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", conn).values
+    table_names = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", conn)
 
+    table_names_formatted = table_names.name.str.split('__',0)[1:]
+
+    if request.method != 'POST':
+        this_table_name = table_names['name'][1]
+
+    model_name = this_table_name.split('__')[0]
     # get todays alerts
     today = datetime.now().strftime('%b %d, %Y')
-    df = pd.read_sql('select * from alerts where Start_Date = "%s"' % today, conn)
+    df = pd.read_sql('select * from "%s" where Start_Date = "%s"' % (this_table_name,today), conn)
+    metric_cols = list(df.columns[:6].values)+['Change', 'Prediction']
+    ordered_columns = ['Ticker', 'Change']+list(df.columns[:6].values)+['Price', 'Prediction', 'Play']
 
-    df = df[['Symbol', 'Play', 'Signal', 'Prediction', 'Vol_Chg', 'Wk', 'Mth','Start_Price']]
+    print(ordered_columns)
 
-    return render_template('index.html', table_names=table_names, todays_alerts=df.values, today=datetime.now().strftime('%B %d, %Y'))
+
+    df = df[ordered_columns]
+
+    for col in metric_cols:
+        print(col)
+        df[col] = pd.Series(["{0:.2f}%".format(val * 100) for val in df[col]], index = df.index)
+    #df = df[['Symbol', 'Play', 'Signal', 'Prediction', 'Vol_Chg', 'Wk', 'Mth','Start_Price']]
+    print(df)
+    return render_template('index.html', model_name = model_name, todays_columns = ordered_columns, todays_alerts=df.values, today=datetime.now().strftime('%B %d, %Y'))
 
 
 if __name__ == '__main__':

@@ -4,18 +4,11 @@
 
 <script>
 $(function() {
-	$('.ProductDetails select').change(function () {
+	$('.table_name_select select').change(function () {
     alert('hey')
   });
 });
 </script>
-
-<div class="ProductDetails">
-<select>
-		<option value="BX/1.0000" selected="">BX</option>
-		<option value="CS/10.0000">CS</option>
-</select>
-</div>
 
 
 <div class="container col-md-6">
@@ -23,38 +16,26 @@ $(function() {
 <div class="row">
   <div class="col-md-6">
   <h5>Today's Alerts - {{ today }} </h5>
-  </div>
-  <div class="table_name_select">
-    Model: <select name="table_name_select">
-    {% for row in table_names %}
-      {{ row }}
-      <option value="{{ row[0] }}">{{ row[0] }}</option>
-    {% endfor %}
-    </select>
-  </div>
+	<br>
+	</div>
+	<div class="col-md-6" style="font-size: 75%; text-align: right">
+  {{ model_name }}
+	</div>
 </div>
 
-<table class='table table-hover table-sm'>
+<table class='table table-hover table-condensed table-sm' style='font-size: 75%'>
   <tr>
-    <th>Symbol</th>
-    <th>Play</th>
-    <th>Signal</th>
-    <th>Prediction</th>
-    <th>Vol Chg</th>
-    <th>Wk</th>
-    <th>Mth</th>
-    <th>Start Price</th>
+    {% for col in todays_columns %}
+			<th>{{ col }}</th>
+		{% endfor %}
   </tr>
 {% for row in todays_alerts %}
-  <tr  onclick="window.open('https://finviz.com/quote.ashx?t={{ row[0] }}','_blank');">
+  <tr  style='text-align: center' onclick="window.open('https://finviz.com/quote.ashx?t={{ row[0] }}','_blank');">
     <td><a target="_blank" href='https://finviz.com/quote.ashx?t={{ row[0] }}'>{{row[0]}}</td>
-    <td>{{ row[1] }}</td>
-    <td>{{ '%0.2f'|format(row[2]*100) }}%</td>
-    <td>{{ '%0.2f'|format(row[3]*100) }}%</td>
-    <td>{{ '%0.2f'|format(row[4]*100) }}%</td>
-    <td>{{ '%0.2f'|format(row[5]*100) }}%</td>
-    <td>{{ '%0.2f'|format(row[6]*100) }}%</td>
-    <td>{{ '$%0.2f'|format(row[7]) }}</td>
+			{% for item in row[1:] %}
+    		<td>{{ item }}</td>
+			{% endfor %}
+
   </tr>
 {% endfor %}
 </table>
