@@ -17,6 +17,12 @@ def process_manager():
         while start_date.strftime('%y%m%d') == NYSE_holidays()[0].strftime('%y%m%d') or start_date.weekday()>=5:
             start_date = start_date + timedelta(days=1)
 
+        if datetime.now()>datetime.strptime(start_date.strftime('%Y-%m-%d') + ' 14:00:00', '%Y-%m-%d %H:%M:%S'):
+            print("Advancing to next date")
+            start_date = start_date + timedelta(days=1)
+            continue
+
+
         # sleep until 9am
         finviz_alert_start = start_date.strftime('%Y-%m-%d') + ' 14:00:00'
         print('Next alert time: ',finviz_alert_start)

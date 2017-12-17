@@ -274,4 +274,4 @@ class closer(object):
 
 
 #finviz_alerts()
-closer()
+#closer()
